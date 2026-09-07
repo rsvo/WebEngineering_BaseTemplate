@@ -2,7 +2,10 @@ export function initSearch() {
   document.querySelector('.search').addEventListener('submit', function(e) {
     e.preventDefault();
 
-    document.querySelectorAll('.highlight').forEach(function(el) {
+    var article = document.querySelector('article');
+    if (!article) return;
+
+    article.querySelectorAll('.highlight').forEach(function(el) {
       var parent = el.parentNode;
       parent.replaceChild(document.createTextNode(el.textContent), el);
       parent.normalize();
@@ -14,19 +17,21 @@ export function initSearch() {
     var regex = new RegExp('(' + searchKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
 
     function walk(node) {
-      if (node.nodeType === 3) { // Text node
+      if (node.nodeType === 3) {
         var match = node.nodeValue.match(regex);
         if (match) {
           var span = document.createElement('span');
           span.innerHTML = node.nodeValue.replace(regex, '<mark class="highlight">$1</mark>');
-          node.replaceWith.apply(node, span.childNodes);
+          var replacements = Array.prototype.slice.call(span.childNodes);
+          node.replaceWith.apply(node, replacements);
         }
-      }
-      else if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE' && node.tagName !== 'FORM') {
-        node.childNodes.forEach(walk);
+      } else if (node.nodeType === 1) {
+        var tag = node.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'FORM' || tag === 'MARK') return;
+        Array.prototype.slice.call(node.childNodes).forEach(walk);
       }
     }
 
-    walk(document.body);
+    walk(article);
   });
 }

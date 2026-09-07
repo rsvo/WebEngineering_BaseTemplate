@@ -24,8 +24,10 @@ export function fetchImageUrl(fileName) {
   return fetch(url).then(function(res) {
     return res.json();
   }).then(function(data) {
-    var pages = data.query.pages;
+    var pages = data.query && data.query.pages;
+    if (!pages) return null;
     var page = Object.values(pages)[0];
+    if (!page || !page.imageinfo || !page.imageinfo[0]) return null;
     return page.imageinfo[0].url;
   });
 }

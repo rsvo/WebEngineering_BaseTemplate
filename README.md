@@ -78,6 +78,23 @@ Fix the semantic and functional issues according to the app requirements. Use ap
 
 **Theory question:** Describe event propagation (capturing, target, and bubbling). Where could event delegation be useful in this application, and what trade-off would it introduce?
 
+**Answer:**
+
+When you click something, the event does not just fire on that one node. It travels in three phases:
+
+- **Capturing:** the event goes down from `window` / `document` toward the target (`window` -> `html` -> `body` -> ... -> parent). Listeners registered with `addEventListener(..., true)` run here.
+- **Target:** the event is at the element that was actually clicked (or submitted). Listeners on that element run.
+- **Bubbling:** the event goes back up the same path. This is the default for `click` and `submit`, so a listener on a parent still sees the event.
+
+```js
+// comments.js: the click hits the .show-hide div, then bubbles to .comments, body, ...
+showHideBtn.addEventListener('click', function() { /* toggle */ });
+```
+
+**Event delegation** means you listen on a parent and look at `event.target` instead of binding each child. That would help on `.comment-container`: new comments are added later, so a single listener could handle a future "delete comment" button without attaching a new handler every submit. Same idea for `.more_bears` if bear cards became clickable after the Wikipedia fetch.
+
+The trade-off is that the handler has to figure out which child was meant (`target.closest('li')` or similar), so it is easier to react to the wrong nested element, and you pay a bit of work on every click inside that parent. For one toggle button and one form, a direct listener is simpler, which is why comments and search still bind to those specific elements.
+
 #### Task 3: Make failures explicit
 
 Add error handling with `try`/`catch` and show useful, user-facing error messages. Check whether each image can be loaded and render a placeholder when it cannot. Do not represent a failed request as valid empty data.
