@@ -248,3 +248,15 @@ audio {
 .comment-container li p:nth-child(2) {
   flex: 5;
 }
+
+.error-message {
+  color: #7a1515;
+  background-color: #f8d4d4;
+  padding: 0.8rem 1.2rem;
+  font-size: 1.6rem;
+  font-family: 'Open Sans Condensed', sans-serif;
+}
+
+.error-message[hidden] {
+  display: none;
+}

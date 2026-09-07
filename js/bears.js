@@ -1,8 +1,13 @@
 import { fetchImageUrl, fetchUrsidWikitext } from './wikipedia.js';
+import { hideError, showError } from './errors.js';
 
 var PLACEHOLDER_IMAGE = 'media/wild-bear.jpg';
 
 function parseBearRows(wikitext) {
+  if (typeof wikitext !== 'string' || !wikitext) {
+    throw new Error('Wikipedia returned empty bear data.');
+  }
+
   var rows = wikitext.split('{{Species table/row').slice(1);
   var bears = [];
   var seen = {};
@@ -28,7 +33,21 @@ function parseBearRows(wikitext) {
     });
   });
 
+  if (!bears.length) {
+    throw new Error('No bear species were found in the Wikipedia data.');
+  }
+
   return bears;
+}
+
+function usePlaceholderIfImageFails(img) {
+  function handleError() {
+    img.removeEventListener('error', handleError);
+    if (img.getAttribute('src') !== PLACEHOLDER_IMAGE) {
+      img.src = PLACEHOLDER_IMAGE;
+    }
+  }
+  img.addEventListener('error', handleError);
 }
 
 function renderBear(container, bear) {
@@ -36,10 +55,11 @@ function renderBear(container, bear) {
   wrap.className = 'bear';
 
   var img = document.createElement('img');
-  img.src = bear.image;
   img.alt = 'Image of ' + bear.name;
   img.style.width = '200px';
   img.style.height = 'auto';
+  usePlaceholderIfImageFails(img);
+  img.src = bear.image;
 
   var title = document.createElement('p');
   var bold = document.createElement('b');
@@ -57,8 +77,12 @@ function renderBear(container, bear) {
 }
 
 function extractBears(wikitext) {
-  var bears = parseBearRows(wikitext);
   var moreBears = document.querySelector('.more_bears');
+  if (!moreBears) {
+    throw new Error('The bear list is missing from the page.');
+  }
+
+  var bears = parseBearRows(wikitext);
 
   var imagePromises = bears.map(function(bear) {
     if (!bear.fileName) {
@@ -71,7 +95,7 @@ function extractBears(wikitext) {
     });
   });
 
-  Promise.all(imagePromises).then(function(urls) {
+  return Promise.all(imagePromises).then(function(urls) {
     bears.forEach(function(bear, i) {
       renderBear(moreBears, {
         name: bear.name,
@@ -84,8 +108,18 @@ function extractBears(wikitext) {
 }
 
 export function initBears() {
+  var moreBears = document.querySelector('.more_bears');
+  hideError(moreBears);
+
   fetchUrsidWikitext()
     .then(function(wikitext) {
-      extractBears(wikitext);
+      try {
+        return extractBears(wikitext);
+      } catch (err) {
+        showError(moreBears, err);
+      }
+    })
+    .catch(function(err) {
+      showError(moreBears, err);
     });
 }

@@ -101,6 +101,30 @@ Add error handling with `try`/`catch` and show useful, user-facing error message
 
 **Theory question:** How do synchronous exceptions and rejected promises travel through this application? Explain where errors should be caught and why catching every error at its source can make failures harder to diagnose.
 
+**Answer:**
+
+A **synchronous exception** is a normal `throw`. It jumps up the call stack until a `try`/`catch`. `parseBearRows` throws if the wikitext is empty; that `throw` is still inside the `.then` callback, so the `try`/`catch` in `initBears` can show the message. If nobody catches it, the module script dies and the user sees nothing.
+
+A **rejected promise** does not use that stack. `fetch` failing, `res.json()` failing, or `throw` inside `readWikipediaJson` all reject the promise. The rejection travels along the chain (`fetchUrsidWikitext` -> `initBears`) until `.catch`. A `try`/`catch` around `initBears()` in `main.js` does **not** see it, because `initBears` only starts the request and returns immediately.
+
+```js
+fetchUrsidWikitext()
+  .then(function(wikitext) {
+    try {
+      return extractBears(wikitext); // sync throws land here
+    } catch (err) {
+      showError(moreBears, err);
+    }
+  })
+  .catch(function(err) {
+    showError(moreBears, err); // network / HTTP / missing wikitext land here
+  });
+```
+
+Catch at the **feature boundary** (`initBears`, the search/comment handlers): log or show one useful message, then stop. That is where you still know what the user was trying to do.
+
+Catching every error at its source is a problem when the source returns a "success" value instead of failing. If `fetchUrsidWikitext` swallowed a 404 and returned `''`, `extractBears` would look like "Wikipedia has no bears". Per-image failures are different: one missing file should become a placeholder, not an empty list. The list request itself must stay a real error.
+
 #### Task 4: Refactor asynchronous control flow
 
 Replace promise callback chains with `async`/`await` and refactor suitable callbacks to arrow functions. Run independent asynchronous operations concurrently where doing so is safe.
