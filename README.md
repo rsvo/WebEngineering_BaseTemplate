@@ -51,6 +51,27 @@ Split the code into separate script files and use ES modules (`import`/`export`)
 
 **Theory question:** How does an ES module differ from a classic script with respect to scope, strict mode, loading, and bindings? Explain why the module boundaries you chose make the application easier to maintain.
 
+**Answer:**
+
+Classic scripts and ES modules behave pretty differently:
+
+- **Scope:** A normal `<script>` just dumps everything into the global scope, so a `var` in one file can overwrite something on `window`. A module has its own scope. If something is not exported, other files can't see it.
+- **Strict mode:** Modules are always in strict mode. Classic scripts are not, unless you add `"use strict"`.
+- **Loading:** A classic script runs as soon as the browser hits the tag (unless you use `defer`/`async`). Modules wait until the HTML is parsed and they also load their imports first, so `<script type="module" src="js/main.js">` can sit at the bottom and still work.
+- **Bindings:** `import` is not a copy. If `wikipedia.js` updates an exported value, the importer sees the new value, but you can't do `fetchUrsidWikitext = somethingElse` in the importing file.
+
+The old inline script is now split into `main.js`, `wikipedia.js`, `bears.js`, `search.js` and `comments.js`. API stuff is in `wikipedia.js`, bear parsing/rendering uses that, and search/comments are their own files because they don't need each other.
+
+```js
+// wikipedia.js
+export function fetchUrsidWikitext() { /* fetch from the wiki API */ }
+
+// bears.js
+import { fetchUrsidWikitext } from './wikipedia.js';
+```
+
+This is easier to maintain because the Wikipedia calls can change without touching the comment form, and nothing imports in a circle (`main` -> features, `bears` -> `wikipedia`). If everything stayed in one file you'd have to scroll through search, comments and fetch code just to fix one thing.
+
 #### Task 2: Correct the application behavior
 
 Fix the semantic and functional issues according to the app requirements. Use appropriate DOM queries and event handling, and ensure the bear list has the same order and number of entries as the source page.
