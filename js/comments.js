@@ -1,54 +1,58 @@
 import { hideError, showError } from './errors.js';
 
+function addComment(list, nameValue, commentValue) {
+  const listItem = document.createElement('li');
+  const namePara = document.createElement('p');
+  const commentPara = document.createElement('p');
+
+  namePara.textContent = nameValue;
+  commentPara.textContent = commentValue;
+  listItem.appendChild(namePara);
+  listItem.appendChild(commentPara);
+  list.appendChild(listItem);
+}
+
+function syncToggleLabel(showHideBtn, commentWrapper) {
+  showHideBtn.textContent = commentWrapper.hidden ? 'Show comments' : 'Hide comments';
+}
+
 export function initComments() {
-  var commentsSection = document.querySelector('.comments');
-  var showHideBtn = document.querySelector('.show-hide');
-  var commentWrapper = document.querySelector('.comment-wrapper');
-  var form = document.querySelector('.comment-form');
-  var nameField = document.querySelector('#name');
-  var commentField = document.querySelector('#comment');
-  var list = document.querySelector('.comment-container');
-  var commentsVisible = false;
+  const commentsSection = document.querySelector('.comments');
+  const showHideBtn = document.querySelector('.show-hide');
+  const commentWrapper = document.querySelector('.comment-wrapper');
+  const form = document.querySelector('.comment-form');
+  const nameField = document.querySelector('#name');
+  const commentField = document.querySelector('#comment');
+  const list = document.querySelector('.comment-container');
 
   if (!commentsSection || !showHideBtn || !commentWrapper || !form || !nameField || !commentField || !list) {
     throw new Error('The comment section is missing from the page.');
   }
 
-  commentWrapper.style.display = 'none';
+  syncToggleLabel(showHideBtn, commentWrapper);
 
   showHideBtn.addEventListener('click', () => {
     try {
-      commentsVisible = !commentsVisible;
-      commentWrapper.style.display = commentsVisible ? 'block' : 'none';
-      showHideBtn.textContent = commentsVisible ? 'Hide comments' : 'Show comments';
+      commentWrapper.hidden = !commentWrapper.hidden;
+      syncToggleLabel(showHideBtn, commentWrapper);
     } catch (err) {
       showError(commentsSection, err);
     }
   });
 
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
     hideError(commentsSection);
 
     try {
-      var nameValue = nameField.value.trim();
-      var commentValue = commentField.value.trim();
+      const nameValue = nameField.value.trim();
+      const commentValue = commentField.value.trim();
       if (!nameValue || !commentValue) {
         showError(commentsSection, new Error('Please enter both a name and a comment.'));
         return;
       }
 
-      var listItem = document.createElement('li');
-      var namePara = document.createElement('p');
-      var commentPara = document.createElement('p');
-
-      namePara.textContent = nameValue;
-      commentPara.textContent = commentValue;
-
-      list.appendChild(listItem);
-      listItem.appendChild(namePara);
-      listItem.appendChild(commentPara);
-
+      addComment(list, nameValue, commentValue);
       nameField.value = '';
       commentField.value = '';
     } catch (err) {

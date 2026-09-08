@@ -173,13 +173,88 @@ Find and eliminate the remaining bad coding practices. Consider scope, accidenta
 
 **Theory question:** Select one of your refactorings and explain how JavaScript scope, closures, references, or prototypes caused the original risk. State how you verified that your refactoring preserved behavior.
 
+**Answer:**
+
+`var` is function-scoped, not block-scoped. Every closure created in the same function shares that one binding. The old image loop was the risky shape: a single `i` that async callbacks read later, after the loop has already moved on.
+
+```js
+// one i for the whole function; every .then sees the final index
+for (var i = 0; i < bears.length; i++) {
+  fetchImageUrl(bears[i].fileName).then(function(url) {
+    renderBear(container, bears[i]); // i is already bears.length
+  });
+}
+```
+
+`map` gives each callback its own `bear` parameter. That parameter is a new binding per call, so the closure cannot pick up a neighbor's row. `const` / `let` would also stop a `for` index from leaking out of the block.
+
+```js
+const bearsWithImages = await Promise.all(bears.map(withResolvedImage));
+```
+
+`withResolvedImage` also returns a **new object**. The parsed row is not mutated, so `parseBearRows` and the renderer do not share a leftover `image` property.
+
 > **What bad coding practices did you find? Why is it a bad practice and how did you fix it?**
-> 
-> _Present your findings here..._
->
-> ```js
-> console.log('Make use of markdown codesnippets to show and explain good/bad practices!')
-> ```
+
+**1. `var` and an exported mutable API URL**
+
+`var` is function-scoped and hoisted. A later `for (var i = ...)` plus an async callback can make every callback see the last `i`. `export var baseUrl` also published a live, writable binding that nothing else needed.
+
+```js
+// before
+export var baseUrl = "https://en.wikipedia.org/w/api.php";
+
+// after
+const WIKI_API_URL = 'https://en.wikipedia.org/w/api.php';
+```
+
+Module-level values are now `const`. Locals that get reassigned use `let`.
+
+**2. One function doing parse, fetch, and render**
+
+`extractBears` parsed wikitext, fetched images, and wrote to the DOM. `initBears` also queried `.more_bears`, so the selector lived in two places. That mixes data work with view work and makes failures harder to place.
+
+```js
+const bears = parseBearRows(wikitext);
+const bearsWithImages = await Promise.all(bears.map(withResolvedImage));
+renderBearList(moreBears, bearsWithImages);
+```
+
+Parse returns new objects. `withResolvedImage` returns a new object with `image` instead of doing `bear.image = url` on the parsed row.
+
+**3. `innerHTML` and a shared `/g` regex**
+
+Search built marks with `innerHTML`, so article text was parsed as HTML. A `<` in the page could become a real element. The walker also reused one `/gi` regex. `.test()` / `.exec()` write `lastIndex` onto that same object, so the next text node can start mid-string unless the index is reset.
+
+```js
+// before
+span.innerHTML = node.nodeValue.replace(regex, '<mark class="highlight">$1</mark>');
+
+// after
+mark.textContent = match[0];
+fragment.appendChild(mark);
+```
+
+Highlights are now `mark` elements with `textContent`. `lastIndex` is set back to `0` before each node.
+
+**4. Dual state and inline DOM styling**
+
+Comments kept a `commentsVisible` boolean and also set `style.display`. Those can disagree. Bear images used `img.style.width` instead of CSS, and each card was appended on its own (extra layout work).
+
+```js
+// before
+commentsVisible = !commentsVisible;
+commentWrapper.style.display = commentsVisible ? 'block' : 'none';
+
+// after (initial hidden is in the HTML)
+commentWrapper.hidden = !commentWrapper.hidden;
+```
+
+The wrapper starts as `<div class="comment-wrapper" hidden>`. The button only toggles that flag. Bear image size lives in `.bear img`. New cards go into a `DocumentFragment` and then into the page once.
+
+**5. Leftover outdated DOM helpers**
+
+`Array.prototype.slice.call(node.childNodes)` and `node.replaceWith.apply(node, replacements)` are the old way to turn array-likes into arrays. `Array.from` / a `for...of` over `childNodes` is enough, and `replaceWith` can take a fragment.
 
 
 ## 2. Dependency- and Build Management Playground

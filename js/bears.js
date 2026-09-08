@@ -1,37 +1,35 @@
 import { fetchImageUrl, fetchUrsidWikitext } from './wikipedia.js';
 import { hideError, showError } from './errors.js';
 
-var PLACEHOLDER_IMAGE = 'media/wild-bear.jpg';
+const PLACEHOLDER_IMAGE = 'media/wild-bear.jpg';
+
+function matchField(row, pattern) {
+  const match = row.match(pattern);
+  return match ? match[1].trim() : null;
+}
 
 function parseBearRows(wikitext) {
   if (typeof wikitext !== 'string' || !wikitext) {
     throw new Error('Wikipedia returned empty bear data.');
   }
 
-  var rows = wikitext.split('{{Species table/row').slice(1);
-  var bears = [];
-  var seen = {};
+  const rows = wikitext.split('{{Species table/row').slice(1);
+  const bears = [];
+  const seenBinomials = new Set();
 
-  rows.forEach((row) => {
-    var nameMatch = row.match(/\|name=\[\[([^\]|]+)/);
-    var binomialMatch = row.match(/\|binomial=([^\n|]+)/);
-    if (!nameMatch || !binomialMatch) return;
+  for (const row of rows) {
+    const name = matchField(row, /\|name=\[\[([^\]|]+)/);
+    const binomial = matchField(row, /\|binomial=([^\n|]+)/);
+    if (!name || !binomial || seenBinomials.has(binomial)) continue;
 
-    var name = nameMatch[1].trim();
-    var binomial = binomialMatch[1].trim();
-    if (seen[binomial]) return;
-    seen[binomial] = true;
-
-    var imageMatch = row.match(/\|image=(?:File:)?([^\n|]+)/);
-    var rangeMatch = row.match(/\|range=([^\n|]+)/);
-
+    seenBinomials.add(binomial);
     bears.push({
-      name: name,
-      binomial: binomial,
-      fileName: imageMatch ? imageMatch[1].trim() : null,
-      range: rangeMatch ? rangeMatch[1].trim() : 'Unknown'
+      name,
+      binomial,
+      fileName: matchField(row, /\|image=(?:File:)?([^\n|]+)/),
+      range: matchField(row, /\|range=([^\n|]+)/) || 'Unknown'
     });
-  });
+  }
 
   if (!bears.length) {
     throw new Error('No bear species were found in the Wikipedia data.');
@@ -41,7 +39,7 @@ function parseBearRows(wikitext) {
 }
 
 function usePlaceholderIfImageFails(img) {
-  var handleError = () => {
+  const handleError = () => {
     img.removeEventListener('error', handleError);
     if (img.getAttribute('src') !== PLACEHOLDER_IMAGE) {
       img.src = PLACEHOLDER_IMAGE;
@@ -50,70 +48,70 @@ function usePlaceholderIfImageFails(img) {
   img.addEventListener('error', handleError);
 }
 
-function renderBear(container, bear) {
-  var wrap = document.createElement('div');
+function renderBear(bear) {
+  const wrap = document.createElement('div');
   wrap.className = 'bear';
 
-  var img = document.createElement('img');
+  const img = document.createElement('img');
   img.alt = 'Image of ' + bear.name;
-  img.style.width = '200px';
-  img.style.height = 'auto';
   usePlaceholderIfImageFails(img);
   img.src = bear.image;
 
-  var title = document.createElement('p');
-  var bold = document.createElement('b');
+  const title = document.createElement('p');
+  const bold = document.createElement('b');
   bold.textContent = bear.name;
   title.appendChild(bold);
   title.appendChild(document.createTextNode(' (' + bear.binomial + ')'));
 
-  var range = document.createElement('p');
+  const range = document.createElement('p');
   range.textContent = 'Range: ' + bear.range;
 
   wrap.appendChild(img);
   wrap.appendChild(title);
   wrap.appendChild(range);
-  container.appendChild(wrap);
+  return wrap;
 }
 
-async function resolveImageUrl(bear) {
+function renderBearList(container, bears) {
+  const fragment = document.createDocumentFragment();
+  bears.forEach((bear) => {
+    fragment.appendChild(renderBear(bear));
+  });
+  container.appendChild(fragment);
+}
+
+async function withResolvedImage(bear) {
   if (!bear.fileName) {
-    return PLACEHOLDER_IMAGE;
+    return { name: bear.name, binomial: bear.binomial, range: bear.range, image: PLACEHOLDER_IMAGE };
   }
+
   try {
-    var url = await fetchImageUrl(bear.fileName);
-    return url || PLACEHOLDER_IMAGE;
-  } catch (err) {
-    return PLACEHOLDER_IMAGE;
-  }
-}
-
-async function extractBears(wikitext) {
-  var moreBears = document.querySelector('.more_bears');
-  if (!moreBears) {
-    throw new Error('The bear list is missing from the page.');
-  }
-
-  var bears = parseBearRows(wikitext);
-  var urls = await Promise.all(bears.map(resolveImageUrl));
-
-  bears.forEach((bear, i) => {
-    renderBear(moreBears, {
+    const url = await fetchImageUrl(bear.fileName);
+    return {
       name: bear.name,
       binomial: bear.binomial,
-      image: urls[i],
-      range: bear.range
-    });
-  });
+      range: bear.range,
+      image: url || PLACEHOLDER_IMAGE
+    };
+  } catch (err) {
+    return { name: bear.name, binomial: bear.binomial, range: bear.range, image: PLACEHOLDER_IMAGE };
+  }
 }
 
 export async function initBears() {
-  var moreBears = document.querySelector('.more_bears');
+  const moreBears = document.querySelector('.more_bears');
+  if (!moreBears) {
+    showError(document.querySelector('main'), new Error('The bear list is missing from the page.'));
+    return;
+  }
+
   hideError(moreBears);
 
   try {
-    var wikitext = await fetchUrsidWikitext();
-    await extractBears(wikitext);
+    const wikitext = await fetchUrsidWikitext();
+    const bears = parseBearRows(wikitext);
+    const bearsWithImages = await Promise.all(bears.map(withResolvedImage));
+    renderBearList(moreBears, bearsWithImages);
   } catch (err) {
     showError(moreBears, err);
   }

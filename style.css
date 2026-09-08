@@ -166,6 +166,16 @@ img, audio {
   margin: 0 auto;
 }
 
+.bear img {
+  width: 200px;
+  height: auto;
+}
+
+.highlight {
+  background-color: yellow;
+  color: black;
+}
+
 audio {
   width: 500px;
 }

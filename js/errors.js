@@ -4,13 +4,13 @@ export function messageFromError(err) {
 }
 
 export function showError(container, err) {
-  var message = messageFromError(err);
+  const message = messageFromError(err);
   if (!container) {
     window.alert(message);
     return;
   }
 
-  var el = container.querySelector('.error-message');
+  let el = container.querySelector('.error-message');
   if (!el) {
     el = document.createElement('p');
     el.className = 'error-message';
@@ -24,7 +24,7 @@ export function showError(container, err) {
 
 export function hideError(container) {
   if (!container) return;
-  var el = container.querySelector('.error-message');
+  const el = container.querySelector('.error-message');
   if (!el) return;
   el.hidden = true;
   el.textContent = '';

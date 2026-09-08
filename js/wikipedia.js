@@ -1,20 +1,24 @@
-export var baseUrl = "https://en.wikipedia.org/w/api.php";
-var title = "List_of_ursids";
+const WIKI_API_URL = 'https://en.wikipedia.org/w/api.php';
+const URSIDS_PAGE = 'List_of_ursids';
 
-var wikitextParams = {
-  action: "parse",
-  page: title,
-  prop: "wikitext",
+const wikitextParams = {
+  action: 'parse',
+  page: URSIDS_PAGE,
+  prop: 'wikitext',
   section: 3,
-  format: "json",
-  origin: "*"
+  format: 'json',
+  origin: '*'
 };
+
+function wikiRequestUrl(params) {
+  return `${WIKI_API_URL}?${new URLSearchParams(params)}`;
+}
 
 async function readWikipediaJson(res) {
   if (!res.ok) {
     throw new Error('Wikipedia request failed (status ' + res.status + ').');
   }
-  var data = await res.json();
+  const data = await res.json();
   if (data.error) {
     throw new Error(data.error.info || 'Wikipedia returned an error.');
   }
@@ -22,31 +26,26 @@ async function readWikipediaJson(res) {
 }
 
 export async function fetchImageUrl(fileName) {
-  var imageParams = {
-    action: "query",
-    titles: "File:" + fileName,
-    prop: "imageinfo",
-    iiprop: "url",
-    format: "json",
-    origin: "*"
+  const imageParams = {
+    action: 'query',
+    titles: 'File:' + fileName,
+    prop: 'imageinfo',
+    iiprop: 'url',
+    format: 'json',
+    origin: '*'
   };
 
-  var url = baseUrl + "?" + new URLSearchParams(imageParams).toString();
-  var data = await readWikipediaJson(await fetch(url));
-  var pages = data.query && data.query.pages;
+  const data = await readWikipediaJson(await fetch(wikiRequestUrl(imageParams)));
+  const pages = data.query && data.query.pages;
   if (!pages) return null;
-  var page = Object.values(pages)[0];
-  if (!page || !page.imageinfo || !page.imageinfo[0] || !page.imageinfo[0].url) {
-    return null;
-  }
-  return page.imageinfo[0].url;
+  const page = Object.values(pages)[0];
+  const url = page && page.imageinfo && page.imageinfo[0] && page.imageinfo[0].url;
+  return url || null;
 }
 
 export async function fetchUrsidWikitext() {
-  var data = await readWikipediaJson(
-    await fetch(baseUrl + "?" + new URLSearchParams(wikitextParams).toString())
-  );
-  var wikitext = data.parse && data.parse.wikitext && data.parse.wikitext['*'];
+  const data = await readWikipediaJson(await fetch(wikiRequestUrl(wikitextParams)));
+  const wikitext = data.parse && data.parse.wikitext && data.parse.wikitext['*'];
   if (!wikitext) {
     throw new Error('Wikipedia did not return the ursid list text.');
   }
