@@ -16,7 +16,7 @@ export function initComments() {
 
   commentWrapper.style.display = 'none';
 
-  showHideBtn.addEventListener('click', function() {
+  showHideBtn.addEventListener('click', () => {
     try {
       commentsVisible = !commentsVisible;
       commentWrapper.style.display = commentsVisible ? 'block' : 'none';
@@ -26,7 +26,7 @@ export function initComments() {
     }
   });
 
-  form.addEventListener('submit', function(e) {
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
     hideError(commentsSection);
 

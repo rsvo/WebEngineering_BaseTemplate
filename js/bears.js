@@ -12,7 +12,7 @@ function parseBearRows(wikitext) {
   var bears = [];
   var seen = {};
 
-  rows.forEach(function(row) {
+  rows.forEach((row) => {
     var nameMatch = row.match(/\|name=\[\[([^\]|]+)/);
     var binomialMatch = row.match(/\|binomial=([^\n|]+)/);
     if (!nameMatch || !binomialMatch) return;
@@ -41,12 +41,12 @@ function parseBearRows(wikitext) {
 }
 
 function usePlaceholderIfImageFails(img) {
-  function handleError() {
+  var handleError = () => {
     img.removeEventListener('error', handleError);
     if (img.getAttribute('src') !== PLACEHOLDER_IMAGE) {
       img.src = PLACEHOLDER_IMAGE;
     }
-  }
+  };
   img.addEventListener('error', handleError);
 }
 
@@ -76,50 +76,45 @@ function renderBear(container, bear) {
   container.appendChild(wrap);
 }
 
-function extractBears(wikitext) {
+async function resolveImageUrl(bear) {
+  if (!bear.fileName) {
+    return PLACEHOLDER_IMAGE;
+  }
+  try {
+    var url = await fetchImageUrl(bear.fileName);
+    return url || PLACEHOLDER_IMAGE;
+  } catch (err) {
+    return PLACEHOLDER_IMAGE;
+  }
+}
+
+async function extractBears(wikitext) {
   var moreBears = document.querySelector('.more_bears');
   if (!moreBears) {
     throw new Error('The bear list is missing from the page.');
   }
 
   var bears = parseBearRows(wikitext);
+  var urls = await Promise.all(bears.map(resolveImageUrl));
 
-  var imagePromises = bears.map(function(bear) {
-    if (!bear.fileName) {
-      return Promise.resolve(PLACEHOLDER_IMAGE);
-    }
-    return fetchImageUrl(bear.fileName).then(function(url) {
-      return url || PLACEHOLDER_IMAGE;
-    }, function() {
-      return PLACEHOLDER_IMAGE;
-    });
-  });
-
-  return Promise.all(imagePromises).then(function(urls) {
-    bears.forEach(function(bear, i) {
-      renderBear(moreBears, {
-        name: bear.name,
-        binomial: bear.binomial,
-        image: urls[i],
-        range: bear.range
-      });
+  bears.forEach((bear, i) => {
+    renderBear(moreBears, {
+      name: bear.name,
+      binomial: bear.binomial,
+      image: urls[i],
+      range: bear.range
     });
   });
 }
 
-export function initBears() {
+export async function initBears() {
   var moreBears = document.querySelector('.more_bears');
   hideError(moreBears);
 
-  fetchUrsidWikitext()
-    .then(function(wikitext) {
-      try {
-        return extractBears(wikitext);
-      } catch (err) {
-        showError(moreBears, err);
-      }
-    })
-    .catch(function(err) {
-      showError(moreBears, err);
-    });
+  try {
+    var wikitext = await fetchUrsidWikitext();
+    await extractBears(wikitext);
+  } catch (err) {
+    showError(moreBears, err);
+  }
 }

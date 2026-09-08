@@ -131,6 +131,42 @@ Replace promise callback chains with `async`/`await` and refactor suitable callb
 
 **Theory question:** Explain the relationship between `async`/`await`, promises, the microtask queue, and the browser event loop. Also explain why an arrow function is not always an interchangeable replacement for a regular function, particularly regarding `this`.
 
+**Answer:**
+
+`async`/`await` is still promises. An `async` function always returns a promise. `await` pauses only that function until the promise settles, then the rest of the function is queued as a **microtask**.
+
+The **browser event loop** works with two queues:
+
+- **Macrotasks** (the task queue): click/submit handlers, `setTimeout`, parsing, rendering. The loop takes one of these, runs it until the call stack is empty, then continues.
+- **Microtasks**: promise `.then` / `.catch` callbacks and every `await` continuation. After the current stack is empty, the loop drains the **microtask queue completely** before the next macrotask or paint.
+
+So `await fetchUrsidWikitext()` does not freeze the page. The current task finishes, the user can still click "Show comments", and only later (as a microtask) does `initBears` continue and render the list.
+
+```js
+export async function initBears() {
+  var wikitext = await fetchUrsidWikitext();
+  await extractBears(wikitext);
+}
+
+var urls = await Promise.all(bears.map(resolveImageUrl));
+```
+
+`Promise.all` starts every image lookup together. Those requests are independent, so waiting for them one after another would only add latency. The wikitext request has to stay first, because the file names come from that parse.
+
+An **arrow function is not always a drop-in replacement**. A normal `function` gets `this` from how it is called. An arrow has no own `this`; it uses the enclosing scope.
+
+```js
+// a regular listener: the browser sets this to the form
+form.addEventListener('submit', function(e) {
+  var searchKey = this.q.value.trim();
+});
+
+// an arrow would make this undefined in a module, so the form is used instead
+form.addEventListener('submit', (e) => {
+  var searchKey = form.q.value.trim();
+});
+```
+
 #### Task 5: Remove remaining code smells
 
 Find and eliminate the remaining bad coding practices. Consider scope, accidental globals, mutation and shared references, function responsibilities, naming, duplication, and DOM update patterns. Document each relevant finding, why it is problematic, and how you fixed it below.

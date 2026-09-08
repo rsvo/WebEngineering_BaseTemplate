@@ -6,7 +6,7 @@ export function initSearch() {
     throw new Error('The search form is missing from the page.');
   }
 
-  form.addEventListener('submit', function(e) {
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
     hideError(form);
 
@@ -16,18 +16,18 @@ export function initSearch() {
         throw new Error('The article content is missing, so search cannot highlight anything.');
       }
 
-      article.querySelectorAll('.highlight').forEach(function(el) {
+      article.querySelectorAll('.highlight').forEach((el) => {
         var parent = el.parentNode;
         parent.replaceChild(document.createTextNode(el.textContent), el);
         parent.normalize();
       });
 
-      var searchKey = this.q.value.trim();
+      var searchKey = form.q.value.trim();
       if (!searchKey) return;
 
       var regex = new RegExp('(' + searchKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
 
-      function walk(node) {
+      var walk = (node) => {
         if (node.nodeType === 3) {
           var match = node.nodeValue.match(regex);
           if (match) {
@@ -41,7 +41,7 @@ export function initSearch() {
           if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'FORM' || tag === 'MARK') return;
           Array.prototype.slice.call(node.childNodes).forEach(walk);
         }
-      }
+      };
 
       walk(article);
     } catch (err) {
