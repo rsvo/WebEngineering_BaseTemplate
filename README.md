@@ -327,6 +327,15 @@ The `build`, `lint`, and `format:check` commands must exit with a non-zero statu
 
 **Theory question:** Why are stable, composable commands such as these useful as an interface for developers and CI? Explain idempotence and identify which of your scripts should be idempotent.
 
+**Answer:**
+
+**Why stable, composable commands matter**: they form a fixed interface (`dev`, `build`, `lint`, etc.) decoupled from implementation, so CI and developers invoke the same verbs regardless of which bundler/linter sits behind them, and swapping tools later doesn't break existing workflows.
+
+**Idempotence**: running a command multiple times with no state change in between produces the same result as running it once.
+
+- `lint`, `format:check`, `build` are idempotent: same input, same pass/fail verdict every time. Required for CI, safely re-runnable without producing a different result.
+- `lint:fix`, `format` mutate files (converge to a fixed point after one run, but aren't side-effect-free), so they must never run in CI, only the non-mutating checks belong there.
+
 #### Task 5: Enforce quality before integration
 
 Configure a pre-commit hook that checks staged code using [husky](https://typicode.github.io/husky/) and [lint-staged](https://github.com/lint-staged/lint-staged). Configure a continuous-integration workflow that installs dependencies from the lockfile and runs the non-mutating build, type, lint, and formatting checks for every push or pull request.
