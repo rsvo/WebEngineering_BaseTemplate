@@ -11,7 +11,7 @@ const wikitextParams = {
 };
 
 function wikiRequestUrl(params: Record<string, string>): string {
-  return `${WIKI_API_URL}?${new URLSearchParams(params)}`;
+  return `${WIKI_API_URL}?${new URLSearchParams(params).toString()}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
