@@ -1,6 +1,10 @@
 import { hideError, showError } from './errors';
 
-function addComment(list: HTMLUListElement, nameValue: string, commentValue: string): void {
+function addComment(
+  list: HTMLUListElement,
+  nameValue: string,
+  commentValue: string
+): void {
   const listItem = document.createElement('li');
   const namePara = document.createElement('p');
   const commentPara = document.createElement('p');
@@ -12,14 +16,20 @@ function addComment(list: HTMLUListElement, nameValue: string, commentValue: str
   list.appendChild(listItem);
 }
 
-function syncToggleLabel(showHideBtn: HTMLElement, commentWrapper: HTMLElement): void {
-  showHideBtn.textContent = commentWrapper.hidden ? 'Show comments' : 'Hide comments';
+function syncToggleLabel(
+  showHideBtn: HTMLElement,
+  commentWrapper: HTMLElement
+): void {
+  showHideBtn.textContent = commentWrapper.hidden
+    ? 'Show comments'
+    : 'Hide comments';
 }
 
 export function initComments(): void {
   const commentsSection = document.querySelector<HTMLElement>('.comments');
   const showHideBtn = document.querySelector<HTMLElement>('.show-hide');
-  const commentWrapper = document.querySelector<HTMLElement>('.comment-wrapper');
+  const commentWrapper =
+    document.querySelector<HTMLElement>('.comment-wrapper');
   const form = document.querySelector<HTMLFormElement>('.comment-form');
   const nameField = document.querySelector<HTMLInputElement>('#name');
   const commentField = document.querySelector<HTMLInputElement>('#comment');
@@ -56,7 +66,10 @@ export function initComments(): void {
       const nameValue = nameField.value.trim();
       const commentValue = commentField.value.trim();
       if (nameValue.length === 0 || commentValue.length === 0) {
-        showError(commentsSection, new Error('Please enter both a name and a comment.'));
+        showError(
+          commentsSection,
+          new Error('Please enter both a name and a comment.')
+        );
         return;
       }
 

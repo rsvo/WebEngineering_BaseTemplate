@@ -30,7 +30,9 @@ function highlightTextNode(textNode: Text, regex: RegExp): void {
   while (match !== null) {
     if (match[0] === '') break;
     if (match.index > lastIndex) {
-      fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      fragment.appendChild(
+        document.createTextNode(text.slice(lastIndex, match.index))
+      );
     }
     const mark = document.createElement('mark');
     mark.className = 'highlight';
@@ -53,7 +55,11 @@ function highlightMatches(root: Node, regex: RegExp): void {
       highlightTextNode(node as Text, regex);
       return;
     }
-    if (node.nodeType !== Node.ELEMENT_NODE || SKIP_TAGS.has((node as Element).tagName)) return;
+    if (
+      node.nodeType !== Node.ELEMENT_NODE ||
+      SKIP_TAGS.has((node as Element).tagName)
+    )
+      return;
     Array.from(node.childNodes).forEach(walk);
   };
 
@@ -75,15 +81,21 @@ export function initSearch(): void {
     try {
       const article = document.querySelector<HTMLElement>('article');
       if (article === null) {
-        throw new Error('The article content is missing, so search cannot highlight anything.');
+        throw new Error(
+          'The article content is missing, so search cannot highlight anything.'
+        );
       }
 
       clearHighlights(article);
 
-      const searchKey = queryField instanceof HTMLInputElement ? queryField.value.trim() : '';
+      const searchKey =
+        queryField instanceof HTMLInputElement ? queryField.value.trim() : '';
       if (searchKey.length === 0) return;
 
-      highlightMatches(article, new RegExp('(' + escapeRegExp(searchKey) + ')', 'gi'));
+      highlightMatches(
+        article,
+        new RegExp('(' + escapeRegExp(searchKey) + ')', 'gi')
+      );
     } catch (err) {
       showError(form, err);
     }

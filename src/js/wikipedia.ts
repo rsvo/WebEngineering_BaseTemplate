@@ -22,7 +22,9 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-async function readWikipediaJson(res: Response): Promise<Record<string, unknown>> {
+async function readWikipediaJson(
+  res: Response
+): Promise<Record<string, unknown>> {
   if (!res.ok) {
     throw new Error('Wikipedia request failed (status ' + res.status + ').');
   }
@@ -33,7 +35,9 @@ async function readWikipediaJson(res: Response): Promise<Record<string, unknown>
   }
 
   if (isRecord(data.error)) {
-    throw new Error(readString(data.error.info) ?? 'Wikipedia returned an error.');
+    throw new Error(
+      readString(data.error.info) ?? 'Wikipedia returned an error.'
+    );
   }
 
   return data;
@@ -78,12 +82,16 @@ export async function fetchImageUrl(fileName: string): Promise<string | null> {
     origin: '*',
   };
 
-  const data = await readWikipediaJson(await fetch(wikiRequestUrl(imageParams)));
+  const data = await readWikipediaJson(
+    await fetch(wikiRequestUrl(imageParams))
+  );
   return extractImageUrl(data);
 }
 
 export async function fetchUrsidWikitext(): Promise<string> {
-  const data = await readWikipediaJson(await fetch(wikiRequestUrl(wikitextParams)));
+  const data = await readWikipediaJson(
+    await fetch(wikiRequestUrl(wikitextParams))
+  );
   const wikitext = extractWikitext(data);
   if (wikitext === null) {
     throw new Error('Wikipedia did not return the ursid list text.');

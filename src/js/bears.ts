@@ -84,7 +84,12 @@ function renderBearList(container: Element, bears: BearWithImage[]): void {
 
 async function withResolvedImage(bear: Bear): Promise<BearWithImage> {
   if (bear.fileName === null) {
-    return { name: bear.name, binomial: bear.binomial, range: bear.range, image: PLACEHOLDER_IMAGE };
+    return {
+      name: bear.name,
+      binomial: bear.binomial,
+      range: bear.range,
+      image: PLACEHOLDER_IMAGE,
+    };
   }
 
   try {
@@ -96,14 +101,22 @@ async function withResolvedImage(bear: Bear): Promise<BearWithImage> {
       image: url ?? PLACEHOLDER_IMAGE,
     };
   } catch (err) {
-    return { name: bear.name, binomial: bear.binomial, range: bear.range, image: PLACEHOLDER_IMAGE };
+    return {
+      name: bear.name,
+      binomial: bear.binomial,
+      range: bear.range,
+      image: PLACEHOLDER_IMAGE,
+    };
   }
 }
 
 export async function initBears(): Promise<void> {
   const moreBears = document.querySelector('.more_bears');
   if (moreBears === null) {
-    showError(document.querySelector('main'), new Error('The bear list is missing from the page.'));
+    showError(
+      document.querySelector('main'),
+      new Error('The bear list is missing from the page.')
+    );
     return;
   }
 
