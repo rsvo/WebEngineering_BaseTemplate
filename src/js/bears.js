@@ -1,7 +1,7 @@
 import { fetchImageUrl, fetchUrsidWikitext } from './wikipedia.js';
 import { hideError, showError } from './errors.js';
 
-const PLACEHOLDER_IMAGE = 'media/wild-bear.jpg';
+const PLACEHOLDER_IMAGE = '/media/wild-bear.jpg';
 
 function matchField(row, pattern) {
   const match = row.match(pattern);
