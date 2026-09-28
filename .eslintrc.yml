@@ -1,0 +1,21 @@
+root: true
+
+env:
+  browser: true
+  es2022: true
+
+parserOptions:
+  project: './tsconfig.json'
+  sourceType: module
+  ecmaVersion: latest
+
+extends:
+  - standard-with-typescript
+  - plugin:@typescript-eslint/recommended
+  - plugin:prettier/recommended
+  - prettier
+
+ignorePatterns:
+  - dist
+  - node_modules
+  - '*.config.js'
