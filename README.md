@@ -304,6 +304,14 @@ Configure ESLint and Prettier using the rulesets below. Resolve all reported err
 
 **Theory question:** What different problems do a linter, a formatter, and the TypeScript compiler detect? Give one concrete example for each from this project.
 
+**Answer:**
+
+- **Formatter**: purely stylistic, whitespace, line length, quote style. No understanding of behavior, only layout.
+- **Linter**: correctness and best-practice patterns that are syntactically and structurally valid but semantically risky, catches intent-level issues a type system doesn't encode.
+- **TypeScript compiler**: structural type correctness, whether the shapes of values match what operations on them require, independent of style or convention.
+
+Each operates at a different layer (soundness, intent, layout) and none subsumes the others.
+
 #### Task 4: Provide a consistent command interface
 
 Define the following tasks within `npm scripts`:
