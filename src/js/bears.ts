@@ -1,21 +1,22 @@
-import { fetchImageUrl, fetchUrsidWikitext } from './wikipedia.js';
-import { hideError, showError } from './errors.js';
+import { fetchImageUrl, fetchUrsidWikitext } from './wikipedia';
+import { hideError, showError } from './errors';
+import type { Bear, BearWithImage } from './types';
 
 const PLACEHOLDER_IMAGE = '/media/wild-bear.jpg';
 
-function matchField(row, pattern) {
-  const match = row.match(pattern);
-  return match ? match[1].trim() : null;
+function matchField(row: string, pattern: RegExp): string | null {
+  const captured = row.match(pattern)?.[1];
+  return typeof captured === 'string' ? captured.trim() : null;
 }
 
-function parseBearRows(wikitext) {
+function parseBearRows(wikitext: string): Bear[] {
   if (typeof wikitext !== 'string' || !wikitext) {
     throw new Error('Wikipedia returned empty bear data.');
   }
 
   const rows = wikitext.split('{{Species table/row').slice(1);
-  const bears = [];
-  const seenBinomials = new Set();
+  const bears: Bear[] = [];
+  const seenBinomials = new Set<string>();
 
   for (const row of rows) {
     const name = matchField(row, /\|name=\[\[([^\]|]+)/);
@@ -27,7 +28,7 @@ function parseBearRows(wikitext) {
       name,
       binomial,
       fileName: matchField(row, /\|image=(?:File:)?([^\n|]+)/),
-      range: matchField(row, /\|range=([^\n|]+)/) || 'Unknown'
+      range: matchField(row, /\|range=([^\n|]+)/) || 'Unknown',
     });
   }
 
@@ -38,8 +39,8 @@ function parseBearRows(wikitext) {
   return bears;
 }
 
-function usePlaceholderIfImageFails(img) {
-  const handleError = () => {
+function usePlaceholderIfImageFails(img: HTMLImageElement): void {
+  const handleError = (): void => {
     img.removeEventListener('error', handleError);
     if (img.getAttribute('src') !== PLACEHOLDER_IMAGE) {
       img.src = PLACEHOLDER_IMAGE;
@@ -48,7 +49,7 @@ function usePlaceholderIfImageFails(img) {
   img.addEventListener('error', handleError);
 }
 
-function renderBear(bear) {
+function renderBear(bear: BearWithImage): HTMLDivElement {
   const wrap = document.createElement('div');
   wrap.className = 'bear';
 
@@ -72,7 +73,7 @@ function renderBear(bear) {
   return wrap;
 }
 
-function renderBearList(container, bears) {
+function renderBearList(container: Element, bears: BearWithImage[]): void {
   const fragment = document.createDocumentFragment();
   bears.forEach((bear) => {
     fragment.appendChild(renderBear(bear));
@@ -80,7 +81,7 @@ function renderBearList(container, bears) {
   container.appendChild(fragment);
 }
 
-async function withResolvedImage(bear) {
+async function withResolvedImage(bear: Bear): Promise<BearWithImage> {
   if (!bear.fileName) {
     return { name: bear.name, binomial: bear.binomial, range: bear.range, image: PLACEHOLDER_IMAGE };
   }
@@ -91,15 +92,15 @@ async function withResolvedImage(bear) {
       name: bear.name,
       binomial: bear.binomial,
       range: bear.range,
-      image: url || PLACEHOLDER_IMAGE
+      image: url || PLACEHOLDER_IMAGE,
     };
   } catch (err) {
     return { name: bear.name, binomial: bear.binomial, range: bear.range, image: PLACEHOLDER_IMAGE };
   }
 }
 
-export async function initBears() {
-  const moreBears = document.querySelector('.more_bears');
+export async function initBears(): Promise<void> {
+  const moreBears = document.querySelector<HTMLElement>('.more_bears');
   if (!moreBears) {
     showError(document.querySelector('main'), new Error('The bear list is missing from the page.'));
     return;

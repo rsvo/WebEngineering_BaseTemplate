@@ -1,6 +1,6 @@
-import { hideError, showError } from './errors.js';
+import { hideError, showError } from './errors';
 
-function addComment(list, nameValue, commentValue) {
+function addComment(list: HTMLUListElement, nameValue: string, commentValue: string): void {
   const listItem = document.createElement('li');
   const namePara = document.createElement('p');
   const commentPara = document.createElement('p');
@@ -12,18 +12,18 @@ function addComment(list, nameValue, commentValue) {
   list.appendChild(listItem);
 }
 
-function syncToggleLabel(showHideBtn, commentWrapper) {
+function syncToggleLabel(showHideBtn: HTMLElement, commentWrapper: HTMLElement): void {
   showHideBtn.textContent = commentWrapper.hidden ? 'Show comments' : 'Hide comments';
 }
 
-export function initComments() {
-  const commentsSection = document.querySelector('.comments');
-  const showHideBtn = document.querySelector('.show-hide');
-  const commentWrapper = document.querySelector('.comment-wrapper');
-  const form = document.querySelector('.comment-form');
-  const nameField = document.querySelector('#name');
-  const commentField = document.querySelector('#comment');
-  const list = document.querySelector('.comment-container');
+export function initComments(): void {
+  const commentsSection = document.querySelector<HTMLElement>('.comments');
+  const showHideBtn = document.querySelector<HTMLElement>('.show-hide');
+  const commentWrapper = document.querySelector<HTMLElement>('.comment-wrapper');
+  const form = document.querySelector<HTMLFormElement>('.comment-form');
+  const nameField = document.querySelector<HTMLInputElement>('#name');
+  const commentField = document.querySelector<HTMLInputElement>('#comment');
+  const list = document.querySelector<HTMLUListElement>('.comment-container');
 
   if (!commentsSection || !showHideBtn || !commentWrapper || !form || !nameField || !commentField || !list) {
     throw new Error('The comment section is missing from the page.');

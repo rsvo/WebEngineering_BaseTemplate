@@ -1,22 +1,24 @@
-import { hideError, showError } from './errors.js';
+import { hideError, showError } from './errors';
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'FORM', 'MARK']);
 
-function escapeRegExp(value) {
+function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function clearHighlights(root) {
-  root.querySelectorAll('.highlight').forEach((el) => {
+function clearHighlights(root: Element): void {
+  root.querySelectorAll<HTMLElement>('.highlight').forEach((el) => {
     const parent = el.parentNode;
     if (!parent) return;
-    parent.replaceChild(document.createTextNode(el.textContent), el);
+    parent.replaceChild(document.createTextNode(el.textContent ?? ''), el);
     parent.normalize();
   });
 }
 
-function highlightTextNode(textNode, regex) {
+function highlightTextNode(textNode: Text, regex: RegExp): void {
   const text = textNode.nodeValue;
+  if (text === null) return;
+
   regex.lastIndex = 0;
   if (!regex.test(text)) return;
 
@@ -45,21 +47,21 @@ function highlightTextNode(textNode, regex) {
   textNode.replaceWith(fragment);
 }
 
-function highlightMatches(root, regex) {
-  const walk = (node) => {
+function highlightMatches(root: Node, regex: RegExp): void {
+  const walk = (node: Node): void => {
     if (node.nodeType === Node.TEXT_NODE) {
-      highlightTextNode(node, regex);
+      highlightTextNode(node as Text, regex);
       return;
     }
-    if (node.nodeType !== Node.ELEMENT_NODE || SKIP_TAGS.has(node.tagName)) return;
+    if (node.nodeType !== Node.ELEMENT_NODE || SKIP_TAGS.has((node as Element).tagName)) return;
     Array.from(node.childNodes).forEach(walk);
   };
 
   walk(root);
 }
 
-export function initSearch() {
-  const form = document.querySelector('.search');
+export function initSearch(): void {
+  const form = document.querySelector<HTMLFormElement>('.search');
   if (!form) {
     throw new Error('The search form is missing from the page.');
   }
@@ -71,14 +73,14 @@ export function initSearch() {
     hideError(form);
 
     try {
-      const article = document.querySelector('article');
+      const article = document.querySelector<HTMLElement>('article');
       if (!article) {
         throw new Error('The article content is missing, so search cannot highlight anything.');
       }
 
       clearHighlights(article);
 
-      const searchKey = queryField && queryField.value ? queryField.value.trim() : '';
+      const searchKey = queryField instanceof HTMLInputElement ? queryField.value.trim() : '';
       if (!searchKey) return;
 
       highlightMatches(article, new RegExp('(' + escapeRegExp(searchKey) + ')', 'gi'));
