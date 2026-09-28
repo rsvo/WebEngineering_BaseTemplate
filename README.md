@@ -342,6 +342,10 @@ Configure a pre-commit hook that checks staged code using [husky](https://typico
 
 **Theory question:** Compare a local pre-commit hook with a CI quality gate. Why is CI still necessary when hooks are configured, and why should CI use non-mutating checks rather than automatically rewriting source files?
 
+**Answer:** A pre-commit hook runs on the developer's machine, scoped to staged files, and can be skipped with `--no-verify`, left uninstalled after cloning, or simply never run if the developer forgets `npm install`. It is a convenience, not an enforcement mechanism. CI runs on a server, independent of any individual's local setup, on every push and pull request, so it is the only checkpoint that is guaranteed to execute and that applies uniformly to all contributors, including ones who bypassed or lack the hook.
+
+CI must use non-mutating checks because its output is a verdict on code that has already been committed and pushed. If a pipeline silently rewrote source files, the passing result would no longer correspond to what was reviewed or merged, and the fix would exist only in the CI runner rather than in version control. CI should report pass or fail on the exact commit, not produce a different one.
+
 
 **ESLint Configurations**
 
