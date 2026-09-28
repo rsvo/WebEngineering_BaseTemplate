@@ -29,7 +29,7 @@ function parseBearRows(wikitext: string): Bear[] {
       name,
       binomial,
       fileName: matchField(row, /\|image=(?:File:)?([^\n|]+)/),
-      range: matchField(row, /\|range=([^\n|]+)/) || 'Unknown',
+      range: matchField(row, /\|range=([^\n|]+)/) ?? 'Unknown',
     });
   }
 
@@ -93,7 +93,7 @@ async function withResolvedImage(bear: Bear): Promise<BearWithImage> {
       name: bear.name,
       binomial: bear.binomial,
       range: bear.range,
-      image: url || PLACEHOLDER_IMAGE,
+      image: url ?? PLACEHOLDER_IMAGE,
     };
   } catch (err) {
     return { name: bear.name, binomial: bear.binomial, range: bear.range, image: PLACEHOLDER_IMAGE };

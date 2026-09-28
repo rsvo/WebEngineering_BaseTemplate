@@ -33,7 +33,7 @@ async function readWikipediaJson(res: Response): Promise<Record<string, unknown>
   }
 
   if (isRecord(data.error)) {
-    throw new Error(readString(data.error.info) || 'Wikipedia returned an error.');
+    throw new Error(readString(data.error.info) ?? 'Wikipedia returned an error.');
   }
 
   return data;
