@@ -268,6 +268,20 @@ Set up the project with `npm` and a build tool of your choice (for example, Vite
 
 **Theory question:** Distinguish source, build, distribution, and deployment. What does your build tool do in development and in a production build, and why is the lockfile important for reproducibility?
 
+**Answer:**
+
+- **Source**: the canonical, human-authored, version-controlled code (`src/`, `index.html`, `package.json`), not necessarily directly executable in the target environment.
+- **Build**: the deterministic transformation of source into artifacts (bundling, transpiling, minifying, hashing). Output (`dist/`) is derived state, reproducible from source plus toolchain, so it's excluded from version control.
+- **Distribution**: the packaged, environment-agnostic result, self-contained assets requiring no build tooling, only a runtime (the browser) to execute.
+- **Deployment**: placing distribution artifacts into a serving context reachable by users. It's orthogonal to building, since one artifact can be deployed to many targets without rebuilding.
+
+The two modes exist because a browser can only fetch native ES modules one HTTP request at a time, which is irrelevant on localhost but costly over a real network. Dev and production optimize for different, conflicting goals, not the same goal at different speeds:
+
+- **Dev** (`vite`): serves source files almost unchanged, over native ES modules. Each `import` triggers a separate request, resolved lazily by the dev server as the browser asks for it, with minimal per-file transformation (e.g., stripping TypeScript types). Nothing is bundled upfront, so the server starts in milliseconds regardless of project size. On save, only the changed module is pushed to the browser and swapped in place (Hot Module Replacement), preserving page state instead of forcing a full reload. This prioritizes iteration latency over transfer efficiency, which is the right tradeoff when the "network" is localhost.
+- **Build** (`vite build`): delegates to Rollup, which statically analyzes the entire module graph starting at `index.html`, tree-shakes unused exports, bundles many small files into a handful of larger chunks, minifies the result, and content-hashes filenames for long-term cache immutability. This work is expensive but paid once at build time, producing static assets in `dist/` optimized for the opposite priority: minimal requests, minimal bytes, and maximal cacheability for every future visitor.
+
+`package.json` declares version *ranges*, so dependency resolution can drift over time as transitive packages publish new compatible releases. `package-lock.json` pins exact versions and integrity hashes for the entire dependency tree, so `npm ci` yields a bit-for-bit identical install anywhere, anytime, turning "the build" from an underspecified, drifting process into a reproducible, verifiable one.
+
 #### Task 2: Migrate to TypeScript
 
 Use TypeScript as the primary development language and adapt the source files and configuration accordingly. Enable strict checking, model the application's domain data, and validate data received from external APIs before treating it as a typed value.
