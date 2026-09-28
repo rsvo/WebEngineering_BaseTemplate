@@ -288,6 +288,16 @@ Use TypeScript as the primary development language and adapt the source files an
 
 **Theory question:** TypeScript uses structural typing and erases types during compilation. Explain both concepts and why a compile-time type alone cannot guarantee the shape of a Wikipedia API response at runtime.
 
+**Answer:**
+
+**Structural typing**: TypeScript checks compatibility by comparing shape (which properties exist, with which types), not by declared name. Any object with matching fields satisfies an interface, no explicit `implements` needed.
+
+**Type erasure**: all type annotations, interfaces, and generics exist only at compile time and are stripped when producing JavaScript (hence `noEmit: true` in our `tsconfig.json`, Vite/esbuild do the actual emission).
+
+**Why this can't guarantee an API response's shape**: `res.json()` returns `Promise<any>`. Casting it with `as SomeInterface` is a compile-time-only claim, erasure means no runtime check ever verifies it. If Wikipedia changes its response format or returns malformed data, the cast still "succeeds," and the program reads properties that don't actually exist, producing a runtime failure the type checker never caught.
+
+This is why `src/js/wikipedia.ts` treats parsed JSON as `unknown` and validates it explicitly (`isRecord`, `typeof === 'string'`, `Array.isArray`) before trusting it as a typed value. The type system's guarantee only holds where external data is validated at the boundary; erasure means that validation must happen in our own runtime code, not in the types themselves.
+
 #### Task 3: Add static analysis and formatting
 
 Configure ESLint and Prettier using the rulesets below. Resolve all reported errors in the application code and avoid disabling rules without a written justification.
