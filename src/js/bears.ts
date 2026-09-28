@@ -10,7 +10,7 @@ function matchField(row: string, pattern: RegExp): string | null {
 }
 
 function parseBearRows(wikitext: string): Bear[] {
-  if (typeof wikitext !== 'string' || !wikitext) {
+  if (typeof wikitext !== 'string' || wikitext.length === 0) {
     throw new Error('Wikipedia returned empty bear data.');
   }
 
@@ -21,7 +21,8 @@ function parseBearRows(wikitext: string): Bear[] {
   for (const row of rows) {
     const name = matchField(row, /\|name=\[\[([^\]|]+)/);
     const binomial = matchField(row, /\|binomial=([^\n|]+)/);
-    if (!name || !binomial || seenBinomials.has(binomial)) continue;
+    if (name === null || binomial === null || seenBinomials.has(binomial))
+      continue;
 
     seenBinomials.add(binomial);
     bears.push({
@@ -32,7 +33,7 @@ function parseBearRows(wikitext: string): Bear[] {
     });
   }
 
-  if (!bears.length) {
+  if (bears.length === 0) {
     throw new Error('No bear species were found in the Wikipedia data.');
   }
 
@@ -82,7 +83,7 @@ function renderBearList(container: Element, bears: BearWithImage[]): void {
 }
 
 async function withResolvedImage(bear: Bear): Promise<BearWithImage> {
-  if (!bear.fileName) {
+  if (bear.fileName === null) {
     return { name: bear.name, binomial: bear.binomial, range: bear.range, image: PLACEHOLDER_IMAGE };
   }
 
@@ -100,8 +101,8 @@ async function withResolvedImage(bear: Bear): Promise<BearWithImage> {
 }
 
 export async function initBears(): Promise<void> {
-  const moreBears = document.querySelector<HTMLElement>('.more_bears');
-  if (!moreBears) {
+  const moreBears = document.querySelector('.more_bears');
+  if (moreBears === null) {
     showError(document.querySelector('main'), new Error('The bear list is missing from the page.'));
     return;
   }

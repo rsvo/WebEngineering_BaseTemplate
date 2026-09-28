@@ -85,7 +85,7 @@ export async function fetchImageUrl(fileName: string): Promise<string | null> {
 export async function fetchUrsidWikitext(): Promise<string> {
   const data = await readWikipediaJson(await fetch(wikiRequestUrl(wikitextParams)));
   const wikitext = extractWikitext(data);
-  if (!wikitext) {
+  if (wikitext === null) {
     throw new Error('Wikipedia did not return the ursid list text.');
   }
   return wikitext;

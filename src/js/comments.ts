@@ -25,7 +25,15 @@ export function initComments(): void {
   const commentField = document.querySelector<HTMLInputElement>('#comment');
   const list = document.querySelector<HTMLUListElement>('.comment-container');
 
-  if (!commentsSection || !showHideBtn || !commentWrapper || !form || !nameField || !commentField || !list) {
+  if (
+    commentsSection === null ||
+    showHideBtn === null ||
+    commentWrapper === null ||
+    form === null ||
+    nameField === null ||
+    commentField === null ||
+    list === null
+  ) {
     throw new Error('The comment section is missing from the page.');
   }
 
@@ -47,7 +55,7 @@ export function initComments(): void {
     try {
       const nameValue = nameField.value.trim();
       const commentValue = commentField.value.trim();
-      if (!nameValue || !commentValue) {
+      if (nameValue.length === 0 || commentValue.length === 0) {
         showError(commentsSection, new Error('Please enter both a name and a comment.'));
         return;
       }

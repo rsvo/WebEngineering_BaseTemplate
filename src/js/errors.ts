@@ -14,13 +14,13 @@ export function messageFromError(err: unknown): string {
 
 export function showError(container: Element | null, err: unknown): void {
   const message = messageFromError(err);
-  if (!container) {
+  if (container === null) {
     window.alert(message);
     return;
   }
 
   let el = container.querySelector<HTMLParagraphElement>('.error-message');
-  if (!el) {
+  if (el === null) {
     el = document.createElement('p');
     el.className = 'error-message';
     el.setAttribute('role', 'alert');
@@ -32,9 +32,9 @@ export function showError(container: Element | null, err: unknown): void {
 }
 
 export function hideError(container: Element | null): void {
-  if (!container) return;
+  if (container === null) return;
   const el = container.querySelector<HTMLParagraphElement>('.error-message');
-  if (!el) return;
+  if (el === null) return;
   el.hidden = true;
   el.textContent = '';
 }
