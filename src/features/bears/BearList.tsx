@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import type { BearWithImage } from '../../js/types';
+import type { BearWithImage } from './types';
 import { BearCard } from './BearCard';
 
 interface BearListProps {

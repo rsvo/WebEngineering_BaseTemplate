@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from 'react';
-import { PLACEHOLDER_IMAGE } from '../../js/bears';
-import type { BearWithImage } from '../../js/types';
 import { Highlight } from '../search/Highlight';
+import { PLACEHOLDER_IMAGE } from './constants';
+import type { BearWithImage } from './types';
 
 interface BearCardProps {
   bear: BearWithImage;

@@ -1,7 +1,6 @@
+import { PLACEHOLDER_IMAGE } from './constants';
 import { fetchImageUrl, fetchUrsidWikitext } from './wikipedia';
 import type { Bear, BearWithImage } from './types';
-
-export const PLACEHOLDER_IMAGE = '/media/wild-bear.jpg';
 
 function matchField(row: string, pattern: RegExp): string | null {
   const captured = row.match(pattern)?.[1];

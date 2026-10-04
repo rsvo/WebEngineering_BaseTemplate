@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { loadBears } from '../../js/bears';
-import { messageFromError } from '../../js/errors';
-import type { BearWithImage } from '../../js/types';
+import { messageFromError } from '../../utils/errors';
+import { loadBears } from './loadBears';
+import type { BearWithImage } from './types';
 
 export type BearsState =
   | { status: 'loading' }

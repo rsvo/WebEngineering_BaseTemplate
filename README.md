@@ -296,7 +296,7 @@ Use TypeScript as the primary development language and adapt the source files an
 
 **Why this can't guarantee an API response's shape**: `res.json()` returns `Promise<any>`. Casting it with `as SomeInterface` is a compile-time-only claim, erasure means no runtime check ever verifies it. If Wikipedia changes its response format or returns malformed data, the cast still "succeeds," and the program reads properties that don't actually exist, producing a runtime failure the type checker never caught.
 
-This is why `src/js/wikipedia.ts` treats parsed JSON as `unknown` and validates it explicitly (`isRecord`, `typeof === 'string'`, `Array.isArray`) before trusting it as a typed value. The type system's guarantee only holds where external data is validated at the boundary; erasure means that validation must happen in our own runtime code, not in the types themselves.
+This is why `src/features/bears/wikipedia.ts` treats parsed JSON as `unknown` and validates it explicitly (`isRecord`, `typeof === 'string'`, `Array.isArray`) before trusting it as a typed value. The type system's guarantee only holds where external data is validated at the boundary; erasure means that validation must happen in our own runtime code, not in the types themselves.
 
 #### Task 3: Add static analysis and formatting
 
