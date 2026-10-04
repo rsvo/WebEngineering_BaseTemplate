@@ -7,6 +7,15 @@ function matchField(row: string, pattern: RegExp): string | null {
   return typeof captured === 'string' ? captured.trim() : null;
 }
 
+// The scientific name is unique per species and never changes, so a slug of it
+// is a stable identifier that is safe to use in a URL.
+function toBearId(binomial: string): string {
+  return binomial
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 function parseBearRows(wikitext: string): Bear[] {
   if (typeof wikitext !== 'string' || wikitext.length === 0) {
     throw new Error('Wikipedia returned empty bear data.');
@@ -14,16 +23,19 @@ function parseBearRows(wikitext: string): Bear[] {
 
   const rows = wikitext.split('{{Species table/row').slice(1);
   const bears: Bear[] = [];
-  const seenBinomials = new Set<string>();
+  const seenIds = new Set<string>();
 
   for (const row of rows) {
     const name = matchField(row, /\|name=\[\[([^\]|]+)/);
     const binomial = matchField(row, /\|binomial=([^\n|]+)/);
-    if (name === null || binomial === null || seenBinomials.has(binomial))
-      continue;
+    if (name === null || binomial === null) continue;
 
-    seenBinomials.add(binomial);
+    const id = toBearId(binomial);
+    if (id === '' || seenIds.has(id)) continue;
+
+    seenIds.add(id);
     bears.push({
+      id,
       name,
       binomial,
       fileName: matchField(row, /\|image=(?:File:)?([^\n|]+)/),

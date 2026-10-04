@@ -1,7 +1,7 @@
 import type { NavLink } from './types';
 
 export const NAV_LINKS: readonly NavLink[] = [
-  { label: 'Home', href: '#' },
+  { label: 'Home', href: '/' },
   { label: 'Our team', href: '#' },
   { label: 'Projects', href: '#' },
   { label: 'Blog', href: '#' },

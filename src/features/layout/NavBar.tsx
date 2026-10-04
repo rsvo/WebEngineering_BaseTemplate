@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { Link } from 'react-router';
 import type { NavLink } from './types';
 
 interface NavBarProps {
@@ -12,7 +13,11 @@ export function NavBar({ links, children }: NavBarProps): ReactElement {
       <ul>
         {links.map((link) => (
           <li key={link.label}>
-            <a href={link.href}>{link.label}</a>
+            {link.href.startsWith('/') ? (
+              <Link to={link.href}>{link.label}</Link>
+            ) : (
+              <a href={link.href}>{link.label}</a>
+            )}
           </li>
         ))}
       </ul>

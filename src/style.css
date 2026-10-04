@@ -267,6 +267,11 @@ audio {
   font-family: 'Open Sans Condensed', sans-serif;
 }
 
+.bear-detail img {
+  width: 400px;
+  height: auto;
+}
+
 .retry {
   font-size: 1.6rem;
   line-height: 32px;

@@ -11,7 +11,7 @@ export function BearList({ bears, query }: BearListProps): ReactElement {
   return (
     <>
       {bears.map((bear) => (
-        <BearCard key={bear.binomial} bear={bear} query={query} />
+        <BearCard key={bear.id} bear={bear} query={query} />
       ))}
     </>
   );

@@ -1,6 +1,7 @@
-import { useState, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
+import { Link } from 'react-router';
 import { Highlight } from '../search/Highlight';
-import { PLACEHOLDER_IMAGE } from './constants';
+import { BearImage } from './BearImage';
 import type { BearWithImage } from './types';
 
 interface BearCardProps {
@@ -9,20 +10,14 @@ interface BearCardProps {
 }
 
 export function BearCard({ bear, query }: BearCardProps): ReactElement {
-  const [imageFailed, setImageFailed] = useState(false);
-
   return (
     <div className="bear">
-      <img
-        src={imageFailed ? PLACEHOLDER_IMAGE : bear.image}
-        alt={`Image of ${bear.name}`}
-        onError={() => {
-          setImageFailed(true);
-        }}
-      />
+      <BearImage src={bear.image} alt={`Image of ${bear.name}`} />
       <p>
         <b>
-          <Highlight text={bear.name} query={query} />
+          <Link to={`/bears/${bear.id}`}>
+            <Highlight text={bear.name} query={query} />
+          </Link>
         </b>
         <Highlight text={` (${bear.binomial})`} query={query} />
       </p>

@@ -1,4 +1,5 @@
 export interface Bear {
+  id: string;
   name: string;
   binomial: string;
   fileName: string | null;
@@ -6,6 +7,7 @@ export interface Bear {
 }
 
 export interface BearWithImage {
+  id: string;
   name: string;
   binomial: string;
   range: string;

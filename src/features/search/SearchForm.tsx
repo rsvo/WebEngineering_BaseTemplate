@@ -1,11 +1,15 @@
 import { useState, type FormEvent, type ReactElement } from 'react';
 
 interface SearchFormProps {
+  initialQuery: string;
   onSearch: (query: string) => void;
 }
 
-export function SearchForm({ onSearch }: SearchFormProps): ReactElement {
-  const [draft, setDraft] = useState('');
+export function SearchForm({
+  initialQuery,
+  onSearch,
+}: SearchFormProps): ReactElement {
+  const [draft, setDraft] = useState(initialQuery);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
