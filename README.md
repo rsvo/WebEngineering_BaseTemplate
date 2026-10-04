@@ -459,6 +459,24 @@ Load and validate the bear data within the React application. Represent loading,
 
 **Theory question:** Why is fetching data a synchronization with an external system rather than part of pure rendering? Explain how cleanup or cancellation prevents race conditions when a component unmounts or a request becomes irrelevant.
 
+**Answer:**
+
+**Fetching is synchronization, not rendering:** Rendering must be pure: the same props and state always give the same JSX, with no side effects, because React may call a component several times, pause it, or discard the result. A network request is a side effect on a system React does not control. It takes time, can fail, and the answer can change between calls. If it ran during render, every re-render (for example on each search submit) would send new requests. So the render only describes the current state (`loading`, `success`, `empty`, `error`), and `useEffect` runs after the commit to synchronize that state with the external system.
+
+**Race conditions:** A request outlives the render that started it. If the component unmounts, or a newer request starts (the "Try again" button), the old response can still arrive later. Responses do not arrive in the order they were sent, so an old one can overwrite a newer result, or write state for a component that is gone.
+
+The effect's cleanup function closes this gap. React runs it on unmount and before the effect runs again. `useBears` creates one `AbortController` per run and aborts it in the cleanup:
+
+```ts
+useEffect(() => {
+  const controller = new AbortController();
+  void load(controller.signal);          // the signal is passed to every fetch
+  return () => { controller.abort(); };  // unmount or next attempt
+}, [attempt]);
+```
+
+`abort()` cancels the network requests, and after each `await` the code checks `controller.signal.aborted` before it calls `setState`. That second check matters because a response can arrive just before the abort. Each run owns its own controller, so an old run can only cancel and ignore itself.
+
 #### Task 5: Add client-side routing and verify the migration
 
 Add at least a list route and a bear-detail route using a stable bear identifier as a route parameter. Use query parameters for optional search/filter view state where appropriate. Verify that every requirement from Playground 1 still works and that all Playground 2 quality commands pass.
