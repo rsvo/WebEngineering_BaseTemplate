@@ -1,13 +1,11 @@
 import { initSearch } from './search';
 import { initComments } from './comments';
-import { initBears } from './bears';
 import { showError } from './errors';
 
-export async function boot(): Promise<void> {
+export function boot(): void {
   try {
     initSearch();
     initComments();
-    await initBears();
   } catch (err) {
     showError(document.querySelector('main'), err);
   }
