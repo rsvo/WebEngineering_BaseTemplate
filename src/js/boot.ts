@@ -3,7 +3,7 @@ import { initComments } from './comments';
 import { initBears } from './bears';
 import { showError } from './errors';
 
-async function boot(): Promise<void> {
+export async function boot(): Promise<void> {
   try {
     initSearch();
     initComments();
@@ -12,5 +12,3 @@ async function boot(): Promise<void> {
     showError(document.querySelector('main'), err);
   }
 }
-
-void boot();

@@ -8,14 +8,24 @@ parserOptions:
   project: './tsconfig.json'
   sourceType: module
   ecmaVersion: latest
+  ecmaFeatures:
+    jsx: true
 
 extends:
   - standard-with-typescript
   - plugin:@typescript-eslint/recommended
+  - plugin:react/recommended
+  - plugin:react/jsx-runtime
+  - plugin:react-hooks/recommended
   - plugin:prettier/recommended
   - prettier
+
+settings:
+  react:
+    version: detect
 
 ignorePatterns:
   - dist
   - node_modules
   - '*.config.js'
+  - '*.config.ts'

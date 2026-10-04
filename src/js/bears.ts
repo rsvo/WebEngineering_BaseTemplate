@@ -40,7 +40,7 @@ function parseBearRows(wikitext: string): Bear[] {
   return bears;
 }
 
-function usePlaceholderIfImageFails(img: HTMLImageElement): void {
+function attachPlaceholderFallback(img: HTMLImageElement): void {
   const handleError = (): void => {
     img.removeEventListener('error', handleError);
     if (img.getAttribute('src') !== PLACEHOLDER_IMAGE) {
@@ -56,7 +56,7 @@ function renderBear(bear: BearWithImage): HTMLDivElement {
 
   const img = document.createElement('img');
   img.alt = 'Image of ' + bear.name;
-  usePlaceholderIfImageFails(img);
+  attachPlaceholderFallback(img);
   img.src = bear.image;
 
   const title = document.createElement('p');
