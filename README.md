@@ -437,6 +437,22 @@ Implement the comment toggle, comment form, and search behavior with React event
 
 **Theory question:** Distinguish props, stored state, and derived values. Explain why direct mutation can produce incorrect React behavior and when lifting state is preferable to introducing context.
 
+**Answer:**
+
+**Props, state, derived values:**
+
+- **Props** are inputs a component receives from its parent and must not change (`query` in `CommentList`).
+- **State** is data a component owns and that changes over time. React remembers it between renders, and only its setter changes it (`isOpen` and `comments` in `CommentsSection`, the input values in `CommentForm`).
+- **Derived values** are computed from props or state during render and are not stored: the toggle label and `hidden` come from `isOpen`, and the highlighted parts come from `splitByQuery(text, query)`. Storing them as extra state would create a second copy that can get out of sync.
+
+**Why mutation breaks things:** React decides whether state changed by comparing references. After `comments.push(c); setComments(comments)` the reference is the same, so React skips the re-render and the new comment does not appear. It also changes a value that earlier renders and memoized children still hold, which breaks the idea that each render is a snapshot. Updates must create a new value:
+
+```tsx
+setComments((previous) => [...previous, { id: crypto.randomUUID(), author, text }]);
+```
+
+**Lifting state vs. context:** State is lifted to the closest common owner of the components that need it. The search query is needed by `SearchForm` and by the article content, so `App` holds it and passes it down. Data flow stays explicit, typed, and easy to trace. Context fits when many components at different depths need the same value and passing props would force many components in between to forward something they do not use (a theme, the current user). It makes dependencies implicit and re-renders every consumer on change. Here the query only travels a few levels, so lifting is the simpler choice.
+
 #### Task 4: Load and represent remote data
 
 Load and validate the bear data within the React application. Represent loading, success, empty, and error states explicitly; prevent stale requests from overwriting newer results; and retain the image fallback behavior from Playground 1.
