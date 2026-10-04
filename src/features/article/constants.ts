@@ -1,7 +1,4 @@
-export type BearTypeColumn =
-  'type' | 'coat' | 'size' | 'habitat' | 'lifespan' | 'diet';
-
-export type BearTypeRow = Record<BearTypeColumn, string>;
+import type { BearTypeColumn, BearTypeRow } from './types';
 
 export const BEAR_TYPE_COLUMNS: ReadonlyArray<{
   key: BearTypeColumn;

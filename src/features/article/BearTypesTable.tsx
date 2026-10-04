@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { Highlight } from '../search/Highlight';
-import { BEAR_TYPE_COLUMNS, BEAR_TYPE_ROWS } from './bearTypes';
+import { BEAR_TYPE_COLUMNS, BEAR_TYPE_ROWS } from './constants';
 
 interface BearTypesTableProps {
   query: string;

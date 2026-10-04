@@ -1,14 +1,4 @@
-const WIKI_API_URL = 'https://en.wikipedia.org/w/api.php';
-const URSIDS_PAGE = 'List_of_ursids';
-
-const wikitextParams = {
-  action: 'parse',
-  page: URSIDS_PAGE,
-  prop: 'wikitext',
-  section: '3',
-  format: 'json',
-  origin: '*',
-};
+import { WIKI_API_URL, WIKITEXT_PARAMS } from './constants';
 
 function wikiRequestUrl(params: Record<string, string>): string {
   return `${WIKI_API_URL}?${new URLSearchParams(params).toString()}`;
@@ -95,7 +85,7 @@ export async function fetchUrsidWikitext(
   signal?: AbortSignal
 ): Promise<string> {
   const data = await readWikipediaJson(
-    await fetch(wikiRequestUrl(wikitextParams), { signal })
+    await fetch(wikiRequestUrl(WIKITEXT_PARAMS), { signal })
   );
   const wikitext = extractWikitext(data);
   if (wikitext === null) {

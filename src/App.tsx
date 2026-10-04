@@ -4,7 +4,7 @@ import { BearsSection } from './features/bears/BearsSection';
 import { CommentsSection } from './features/comments/CommentsSection';
 import { Footer } from './features/layout/Footer';
 import { Header } from './features/layout/Header';
-import { NAV_LINKS, RELATED_LINKS } from './features/layout/links';
+import { NAV_LINKS, RELATED_LINKS } from './features/layout/constants';
 import { NavBar } from './features/layout/NavBar';
 import { RelatedLinks } from './features/layout/RelatedLinks';
 import { SearchForm } from './features/search/SearchForm';

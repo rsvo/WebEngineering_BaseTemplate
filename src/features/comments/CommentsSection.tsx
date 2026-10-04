@@ -2,15 +2,8 @@ import { useState, type ReactElement } from 'react';
 import { Highlight } from '../search/Highlight';
 import { CommentForm } from './CommentForm';
 import { CommentList } from './CommentList';
+import { INITIAL_COMMENTS } from './constants';
 import type { CommentEntry } from './types';
-
-const INITIAL_COMMENTS: readonly CommentEntry[] = [
-  {
-    id: 'bob-fossil-1',
-    author: 'Bob Fossil',
-    text: 'Oh I am so glad you taught me all about the big brown angry guys...',
-  },
-];
 
 interface CommentsSectionProps {
   query: string;

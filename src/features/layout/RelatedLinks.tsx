@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import type { NavLink } from './links';
+import type { NavLink } from './types';
 
 interface RelatedLinksProps {
   links: readonly NavLink[];
