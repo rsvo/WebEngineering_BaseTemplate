@@ -413,6 +413,24 @@ Decompose the interface into components organised by feature. Use props where ap
 
 **Theory question:** Explain how component boundaries and typed props act as contracts. What makes a key stable, why does React need keys during reconciliation, and why is an array index unsuitable when list entries can change order?
 
+**Answer:**
+
+**Contracts:** A component boundary defines what goes in (props) and what comes out (UI). Callers do not depend on the internals, so those can change freely. Typed props make the contract checked by the compiler: a caller that omits a prop or passes the wrong type does not compile. The check exists only at compile time, so external data (the Wikipedia response) still has to be validated first.
+
+```tsx
+interface BearCardProps {
+  bear: BearWithImage;
+}
+
+<BearCard key={bear.binomial} bear={bear} />   // <BearCard /> would not compile
+```
+
+**Stable keys:** A key is stable if it identifies the same entity in every render: it comes from the data (not from the position or `Math.random()`) and is unique among siblings. `bear.binomial` fits because `parseBearRows` removes duplicates.
+
+**Why React needs keys:** During reconciliation React matches the new list against the previous one. With keys it matches entries by identity and keeps, moves, inserts, or removes the right components and DOM nodes. Without keys it can only compare by position.
+
+**Why not the index:** The index is a position, not an identity. After a reorder, insert, or removal, an index points to a different entry, so React reuses the component (and its state) for the wrong data. Here `BearCard` holds `imageFailed`, which would stick to the wrong bear.
+
 #### Task 3: Model state and interaction
 
 Implement the comment toggle, comment form, and search behavior with React events and state. Use controlled inputs, immutable updates, and derived values rather than duplicate state. Lift state only to the closest common owner that needs it.
