@@ -72,7 +72,10 @@ function extractWikitext(data: Record<string, unknown>): string | null {
   return readString(wikitext['*']);
 }
 
-export async function fetchImageUrl(fileName: string): Promise<string | null> {
+export async function fetchImageUrl(
+  fileName: string,
+  signal?: AbortSignal
+): Promise<string | null> {
   const imageParams = {
     action: 'query',
     titles: 'File:' + fileName,
@@ -83,14 +86,16 @@ export async function fetchImageUrl(fileName: string): Promise<string | null> {
   };
 
   const data = await readWikipediaJson(
-    await fetch(wikiRequestUrl(imageParams))
+    await fetch(wikiRequestUrl(imageParams), { signal })
   );
   return extractImageUrl(data);
 }
 
-export async function fetchUrsidWikitext(): Promise<string> {
+export async function fetchUrsidWikitext(
+  signal?: AbortSignal
+): Promise<string> {
   const data = await readWikipediaJson(
-    await fetch(wikiRequestUrl(wikitextParams))
+    await fetch(wikiRequestUrl(wikitextParams), { signal })
   );
   const wikitext = extractWikitext(data);
   if (wikitext === null) {

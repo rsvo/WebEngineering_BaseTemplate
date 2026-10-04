@@ -32,43 +32,32 @@ function parseBearRows(wikitext: string): Bear[] {
     });
   }
 
-  if (bears.length === 0) {
-    throw new Error('No bear species were found in the Wikipedia data.');
-  }
-
   return bears;
 }
 
-async function withResolvedImage(bear: Bear): Promise<BearWithImage> {
-  if (bear.fileName === null) {
-    return {
-      name: bear.name,
-      binomial: bear.binomial,
-      range: bear.range,
-      image: PLACEHOLDER_IMAGE,
-    };
+async function withResolvedImage(
+  bear: Bear,
+  signal: AbortSignal
+): Promise<BearWithImage> {
+  const { fileName, ...rest } = bear;
+  let image = PLACEHOLDER_IMAGE;
+
+  if (fileName !== null) {
+    try {
+      image = (await fetchImageUrl(fileName, signal)) ?? PLACEHOLDER_IMAGE;
+    } catch (err) {
+      // A cancelled request must not be mistaken for a missing image.
+      if (signal.aborted) throw err;
+    }
   }
 
-  try {
-    const url = await fetchImageUrl(bear.fileName);
-    return {
-      name: bear.name,
-      binomial: bear.binomial,
-      range: bear.range,
-      image: url ?? PLACEHOLDER_IMAGE,
-    };
-  } catch (err) {
-    return {
-      name: bear.name,
-      binomial: bear.binomial,
-      range: bear.range,
-      image: PLACEHOLDER_IMAGE,
-    };
-  }
+  return { ...rest, image };
 }
 
-export async function loadBears(): Promise<BearWithImage[]> {
-  const wikitext = await fetchUrsidWikitext();
+export async function loadBears(signal: AbortSignal): Promise<BearWithImage[]> {
+  const wikitext = await fetchUrsidWikitext(signal);
   const bears = parseBearRows(wikitext);
-  return await Promise.all(bears.map(withResolvedImage));
+  return await Promise.all(
+    bears.map(async (bear) => await withResolvedImage(bear, signal))
+  );
 }
