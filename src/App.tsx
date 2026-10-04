@@ -1,4 +1,4 @@
-import { useEffect, type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Article } from './features/article/Article';
 import { BearsSection } from './features/bears/BearsSection';
 import { CommentsSection } from './features/comments/CommentsSection';
@@ -8,27 +8,23 @@ import { NAV_LINKS, RELATED_LINKS } from './features/layout/links';
 import { NavBar } from './features/layout/NavBar';
 import { RelatedLinks } from './features/layout/RelatedLinks';
 import { SearchForm } from './features/search/SearchForm';
-import { boot } from './js/boot';
 
 export function App(): ReactElement {
-  // Temporary bridge: the imperative search and comment code from Playground 1
-  // still drives the DOM rendered by the components. It is replaced by React
-  // state and events in the following tasks.
-  useEffect(() => {
-    boot();
-  }, []);
+  // The search form and the article content both need the query, so App,
+  // their closest common owner, holds it.
+  const [query, setQuery] = useState('');
 
   return (
     <>
       <Header />
       <NavBar links={NAV_LINKS}>
-        <SearchForm />
+        <SearchForm onSearch={setQuery} />
       </NavBar>
 
       <main>
-        <Article>
-          <CommentsSection />
-          <BearsSection />
+        <Article query={query}>
+          <CommentsSection query={query} />
+          <BearsSection query={query} />
         </Article>
         <RelatedLinks links={RELATED_LINKS} />
       </main>

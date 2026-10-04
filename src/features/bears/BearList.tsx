@@ -4,13 +4,14 @@ import { BearCard } from './BearCard';
 
 interface BearListProps {
   bears: readonly BearWithImage[];
+  query: string;
 }
 
-export function BearList({ bears }: BearListProps): ReactElement {
+export function BearList({ bears, query }: BearListProps): ReactElement {
   return (
     <>
       {bears.map((bear) => (
-        <BearCard key={bear.binomial} bear={bear} />
+        <BearCard key={bear.binomial} bear={bear} query={query} />
       ))}
     </>
   );

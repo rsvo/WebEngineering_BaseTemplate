@@ -1,77 +1,67 @@
 import type { ReactElement, ReactNode } from 'react';
+import { Highlight } from '../search/Highlight';
+import { BearTypesTable } from './BearTypesTable';
 
 interface ArticleProps {
+  query: string;
   children?: ReactNode;
 }
 
-export function Article({ children }: ArticleProps): ReactElement {
+export function Article({ query, children }: ArticleProps): ReactElement {
   return (
     <article>
-      <font size="6">The trouble with Bears</font>
+      <font size="6">
+        <Highlight text="The trouble with Bears" query={query} />
+      </font>
       <br />
       <br />
-      By Evan Wild
+      <Highlight text="By Evan Wild" query={query} />
       <br />
       <br />
-      Tall, lumbering, angry, dangerous. The real live bears of this world are
-      proud, independent creatures, self-serving and always on the hunt for
-      food.
+      <Highlight
+        text="Tall, lumbering, angry, dangerous. The real live bears of this world are proud, independent creatures, self-serving and always on the hunt for food."
+        query={query}
+      />
       <br />
       <br />
-      <font size="5">Types of bear</font>
+      <font size="5">
+        <Highlight text="Types of bear" query={query} />
+      </font>
       <br />
       <br />
-      <table>
-        <thead>
-          <tr>
-            <td>Bear Type</td>
-            <td>Coat</td>
-            <td>Adult size</td>
-            <td>Habitat</td>
-            <td>Lifespan</td>
-            <td>Diet</td>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Wild</td>
-            <td>Brown or black</td>
-            <td>1.4 to 2.8 meters</td>
-            <td>Woods and forests</td>
-            <td>25 to 28 years</td>
-            <td>Fish, meat, plants</td>
-          </tr>
-          <tr>
-            <td>Urban</td>
-            <td>North Face</td>
-            <td>18 to 22</td>
-            <td>Condos and coffee shops</td>
-            <td>20 to 32 years</td>
-            <td>Starbucks, sushi</td>
-          </tr>
-        </tbody>
-      </table>
-      <font size="5">Habitats and Eating habits</font>
+      <BearTypesTable query={query} />
+      <font size="5">
+        <Highlight text="Habitats and Eating habits" query={query} />
+      </font>
       <br />
       <br />
-      Wild bears eat a variety of meat, fish, fruit, nuts, and other natually
-      growing ingredients...
+      <Highlight
+        text="Wild bears eat a variety of meat, fish, fruit, nuts, and other natually growing ingredients..."
+        query={query}
+      />
       <br />
       <br />
       <img src="/media/wild-bear.jpg" alt="Wild bear in forest" />
       <br />
       <br />
-      Urban (gentrified) bears on the other hand have largely abandoned the old
-      ways...
+      <Highlight
+        text="Urban (gentrified) bears on the other hand have largely abandoned the old ways..."
+        query={query}
+      />
       <br />
       <br />
       <img src="/media/urban-bear.jpg" alt="Urban bear near buildings" />
       <br />
       <br />
-      <font size="5">Mating rituals</font>
+      <font size="5">
+        <Highlight text="Mating rituals" query={query} />
+      </font>
       <br />
       <br />
-      Bears are romantic creatures by nature...
+      <Highlight
+        text="Bears are romantic creatures by nature..."
+        query={query}
+      />
       <br />
       <br />
       <audio controls>
@@ -82,10 +72,15 @@ export function Article({ children }: ArticleProps): ReactElement {
         </p>
       </audio>
       <aside>
-        <font size="5">About the author</font>
+        <font size="5">
+          <Highlight text="About the author" query={query} />
+        </font>
         <br />
         <br />
-        Evan Wild is an unemployed plumber from Doncaster...
+        <Highlight
+          text="Evan Wild is an unemployed plumber from Doncaster..."
+          query={query}
+        />
       </aside>
       {children}
     </article>

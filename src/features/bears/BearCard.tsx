@@ -1,12 +1,14 @@
 import { useState, type ReactElement } from 'react';
 import { PLACEHOLDER_IMAGE } from '../../js/bears';
 import type { BearWithImage } from '../../js/types';
+import { Highlight } from '../search/Highlight';
 
 interface BearCardProps {
   bear: BearWithImage;
+  query: string;
 }
 
-export function BearCard({ bear }: BearCardProps): ReactElement {
+export function BearCard({ bear, query }: BearCardProps): ReactElement {
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
@@ -19,9 +21,14 @@ export function BearCard({ bear }: BearCardProps): ReactElement {
         }}
       />
       <p>
-        <b>{bear.name}</b> ({bear.binomial})
+        <b>
+          <Highlight text={bear.name} query={query} />
+        </b>
+        <Highlight text={` (${bear.binomial})`} query={query} />
       </p>
-      <p>Range: {bear.range}</p>
+      <p>
+        <Highlight text={`Range: ${bear.range}`} query={query} />
+      </p>
     </div>
   );
 }

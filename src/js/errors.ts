@@ -30,11 +30,3 @@ export function showError(container: Element | null, err: unknown): void {
   el.hidden = false;
   el.textContent = message;
 }
-
-export function hideError(container: Element | null): void {
-  if (container === null) return;
-  const el = container.querySelector<HTMLParagraphElement>('.error-message');
-  if (el === null) return;
-  el.hidden = true;
-  el.textContent = '';
-}
