@@ -483,6 +483,20 @@ Add at least a list route and a bear-detail route using a stable bear identifier
 
 **Theory question:** Distinguish client-side rendering, a single-page application, and client-side routing. Compare route parameters with query parameters, and describe one benefit and one cost of the SPA architecture used here.
 
+**Answer:**
+
+**Three different things:**
+
+- **Client-side rendering (CSR)** means the browser builds the UI with JavaScript. Our `index.html` only contains `<div id="root">`, and `createRoot(...).render(<App />)` creates the page in the browser. The opposite is server-side rendering, where the server sends finished HTML.
+- **A single-page application (SPA)** is an architecture: the HTML document is loaded once, and later navigation never loads a new document. JavaScript swaps the view and fetches data with `fetch`. CSR is where rendering happens, while "SPA" is about not reloading the document, so the two are related but not the same.
+- **Client-side routing** is the mechanism inside an SPA that maps the URL to what is shown. React Router changes the address with the History API (`pushState`) and listens for back/forward, without asking the server. `<Link to="/bears/sun-bear">` changes the URL and the matching `<Route>` renders.
+
+**Route parameters vs. query parameters:** A route parameter is part of the path and identifies *which* resource is shown: `/bears/:bearId` is required, and without it a different route matches. A query parameter is optional state that changes *how* a page is viewed: `/?q=panda` is the same route with a search applied. It can be missing, and several can be combined. That is why the bear identifier is a route parameter and the search term is a query parameter (`useParams` vs. `useSearchParams`).
+
+**One benefit:** Navigation does not reload the page, and state and data stay in memory. The bears are loaded once in `App` and shared, so going from the list to a detail page causes no new request.
+
+**One cost:** The server only has one real page, so a deep link such as `/bears/sun-bear` must be answered with `index.html` (a fallback rule), otherwise a reload or a shared link gives a 404. The Vite dev server does this by itself, but plain static hosting has to be configured for it.
+
 ---
 
 ## In-Class Accessibility Workshop
