@@ -385,6 +385,28 @@ Add React (or another framework of your choice) to the existing Vite and TypeScr
 
 **Theory question:** Contrast imperative DOM updates with React's declarative model. What happens during React's render, reconciliation, and commit phases, and why should code outside React not modify DOM nodes owned by the React root? If you chose not to use React, answer the same questions in the context of your chosen framework.
 
+**Answer:**
+
+**Imperative vs. declarative:** Imperative code spells out the steps to change the DOM (create a node, append it, update a label) and has to keep the DOM in sync with the data by hand, like `addComment` and `syncToggleLabel` in `comments.ts`. In React you describe what the UI looks like for the current state and React works out the DOM operations.
+
+```tsx
+// imperative: describe the steps
+const li = document.createElement('li');
+li.textContent = text;
+list.appendChild(li);
+
+// declarative: describe the result
+<ul>{comments.map((c) => <li key={c.id}>{c.text}</li>)}</ul>
+```
+
+**The phases:**
+
+- **Render:** React calls the components (`App()`) and gets a tree of element objects. This must be pure and touches no DOM.
+- **Reconciliation:** React diffs the new tree against the previous one (same type at the same position is updated, a different type is replaced, keys identify list entries) and produces the minimal set of changes.
+- **Commit:** React applies those changes to the real DOM, then runs effects. Our temporary `boot()` runs here, since only now do the elements it queries exist.
+
+**Why outside code must not touch React-owned DOM:** React keeps its own model of what it put into `#root` and applies only differences, without re-reading the DOM. If other code adds, replaces, or removes nodes, the model and the DOM diverge, and later updates can be lost or throw (e.g. `removeChild` on a node that is gone). `search.ts` and `comments.ts` do exactly that to the page `App` renders. This only works because `App` has no state and never re-renders, so the imperative code is replaced in the following tasks.
+
 #### Task 2: Design the component tree
 
 Decompose the interface into components organised by feature. Use props where appropriate, keep rendering pure, and render bear collections with stable keys.
