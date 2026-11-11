@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
-// All requests go to the same origin; in dev Vite proxies /api, in Docker nginx.
-export const API_BASE_URL = '/api';
+// By default all requests go to the same origin: in dev Vite proxies /api, in
+// Docker nginx does, so the browser never makes a cross-origin request. A build
+// served from another origin needs the API's absolute URL at build time, e.g.
+// VITE_API_BASE_URL=http://localhost:3000/api, and the API has to allow that
+// origin via CORS. Read in exactly one place, so no other module builds URLs.
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() ?? '';
+export const API_BASE_URL =
+  configuredBaseUrl === '' ? '/api' : configuredBaseUrl.replace(/\/+$/, '');
 
 const REQUEST_ID_HEADER = 'x-request-id';
 
@@ -81,12 +87,24 @@ async function send(
   };
   if (body !== undefined) headers['content-type'] = 'application/json';
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
+    });
+  } catch (err) {
+    if (signal?.aborted === true) throw err;
+    // fetch only rejects when there is no usable response: offline, DNS, or a
+    // response the browser blocked by CORS. Scripts are deliberately not told
+    // which one; the reason is only in the browser console.
+    throw new Error(
+      'The server could not be reached. Please check your connection and try again.',
+      { cause: err }
+    );
+  }
 
   if (!response.ok) throw await toApiError(response);
   return response;

@@ -12,6 +12,7 @@ export interface Config {
   logLevel: string;
   prettyLogs: boolean;
   enableDebugRoutes: boolean;
+  corsOrigins: readonly string[];
   wikipedia: WikipediaConfig;
   bearsCacheTtlMs: number;
 }
@@ -71,6 +72,27 @@ function readUrl(
   return value;
 }
 
+// A comma-separated list of exact origins (scheme://host[:port]). The browser
+// compares the Origin header byte for byte, so "http://localhost:4173/" (with
+// a slash) or a path would never match; such entries are rejected at startup.
+// "*" is rejected too: only listed origins may read our responses.
+function readOrigins(name: string, raw: string | undefined): string[] {
+  if (raw === undefined || raw.trim() === '') return [];
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '')
+    .map((entry) => {
+      const origin = URL.canParse(entry) ? new URL(entry).origin : 'null';
+      if (origin !== entry) {
+        throw new Error(
+          `${name} must list origins like "http://localhost:4173": "${entry}"`
+        );
+      }
+      return origin;
+    });
+}
+
 // Read once at startup, so a misconfigured container fails immediately instead
 // of on the first request.
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -84,6 +106,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       env.ENABLE_DEBUG_ROUTES,
       env.NODE_ENV !== 'production'
     ),
+    // Empty: no cross-origin access at all. The web app does not need it, as it
+    // reaches the API through a same-origin proxy (Vite in dev, nginx in Docker).
+    corsOrigins: readOrigins('CORS_ORIGINS', env.CORS_ORIGINS),
     wikipedia: {
       apiUrl: readUrl(
         'WIKIPEDIA_API_URL',

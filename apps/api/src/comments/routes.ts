@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { BearIdSchema } from '../bears/schema.js';
 import type { BearService } from '../bears/service.js';
 import { NotFoundError } from '../errors.js';
+import { problemResponses } from '../openapi.js';
 import {
   CommentIdSchema,
   CommentListSchema,
@@ -18,6 +19,7 @@ interface CommentRoutesOptions {
 
 const BearParamsSchema = z.object({ id: BearIdSchema });
 const CommentParamsSchema = z.object({ commentId: CommentIdSchema });
+const TAGS = ['comments'];
 
 export const commentRoutes: FastifyPluginAsyncZod<
   CommentRoutesOptions
@@ -26,8 +28,15 @@ export const commentRoutes: FastifyPluginAsyncZod<
     '/bears/:id/comments',
     {
       schema: {
+        tags: TAGS,
+        summary: "List a bear's comments",
+        description: 'Oldest first; `[]` if the bear has no comments yet.',
         params: BearParamsSchema,
-        response: { 200: CommentListSchema },
+        response: {
+          200: CommentListSchema,
+          // Checking that the bear exists needs the bear list from Wikipedia.
+          ...problemResponses(400, 404, 500, 502, 504),
+        },
       },
     },
     async (request) => {
@@ -42,9 +51,16 @@ export const commentRoutes: FastifyPluginAsyncZod<
     '/bears/:id/comments',
     {
       schema: {
+        tags: TAGS,
+        summary: 'Add a comment to a bear',
+        description:
+          'Answers 201 Created with the new comment and its URL in `Location`. Not idempotent: sending the same request twice creates two comments.',
         params: BearParamsSchema,
         body: CreateCommentSchema,
-        response: { 201: CommentSchema },
+        response: {
+          201: CommentSchema,
+          ...problemResponses(400, 404, 500, 502, 504),
+        },
       },
     },
     async (request, reply) => {
@@ -62,8 +78,13 @@ export const commentRoutes: FastifyPluginAsyncZod<
     '/comments/:commentId',
     {
       schema: {
+        tags: TAGS,
+        summary: 'Get one comment',
         params: CommentParamsSchema,
-        response: { 200: CommentSchema },
+        response: {
+          200: CommentSchema,
+          ...problemResponses(400, 404, 500),
+        },
       },
     },
     async (request) => {
@@ -79,7 +100,19 @@ export const commentRoutes: FastifyPluginAsyncZod<
 
   app.delete(
     '/comments/:commentId',
-    { schema: { params: CommentParamsSchema } },
+    {
+      schema: {
+        tags: TAGS,
+        summary: 'Delete a comment',
+        description:
+          'Idempotent: once the comment is gone, repeating the request answers 404 but changes nothing.',
+        params: CommentParamsSchema,
+        response: {
+          204: z.undefined(),
+          ...problemResponses(400, 404, 500),
+        },
+      },
+    },
     async (request, reply) => {
       if (!comments.delete(request.params.commentId)) {
         // Repeating a DELETE still leaves the server in the same state (the

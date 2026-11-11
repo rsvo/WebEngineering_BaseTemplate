@@ -16,22 +16,47 @@ export const PROBLEM_CONTENT_TYPE = 'application/problem+json; charset=utf-8';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// The one error contract of this API (RFC 9457 + our extension members).
-export const FieldErrorSchema = z.object({
-  location: z.string(),
-  pointer: z.string(),
-  detail: z.string(),
-});
+// The one error contract of this API (RFC 9457 + our extension members). The
+// ids make them named components in the OpenAPI document.
+export const FieldErrorSchema = z
+  .object({
+    location: z
+      .string()
+      .describe('Part of the request: body, params, querystring or headers.'),
+    pointer: z
+      .string()
+      .describe(
+        'JSON pointer (RFC 6901) into that part, e.g. "/author"; "" for the part as a whole.'
+      ),
+    detail: z.string().describe('What is wrong with the value.'),
+  })
+  .meta({ id: 'FieldError' });
 
-export const ProblemDetailsSchema = z.object({
-  type: z.string(),
-  title: z.string(),
-  status: z.number().int().min(400).max(599),
-  detail: z.string(),
-  instance: z.string(),
-  requestId: z.string(),
-  errors: z.array(FieldErrorSchema).optional(),
-});
+export const ProblemDetailsSchema = z
+  .object({
+    type: z
+      .string()
+      .describe(
+        'URI of the problem type; "about:blank" for plain HTTP status problems.'
+      ),
+    title: z.string().describe('Short summary of the problem type.'),
+    status: z.number().int().min(400).max(599),
+    detail: z
+      .string()
+      .describe('Explanation of this occurrence, safe to show to users.'),
+    instance: z
+      .string()
+      .describe('Identifies this occurrence: urn:uuid:<request id>.'),
+    requestId: z.string().describe('Same as the x-request-id header.'),
+    errors: z
+      .array(FieldErrorSchema)
+      .optional()
+      .describe('Only for validation-error: every invalid field.'),
+  })
+  .meta({
+    id: 'ProblemDetails',
+    description: 'RFC 9457 Problem Details, sent as application/problem+json.',
+  });
 
 export type ProblemDetails = z.infer<typeof ProblemDetailsSchema>;
 

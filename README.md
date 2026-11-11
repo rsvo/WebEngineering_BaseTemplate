@@ -509,6 +509,7 @@ In this playground the repository becomes an npm workspace with two apps: the Re
 | `npm run dev` | starts the API (`tsx watch`, restarts on change) and Vite (HMR) in parallel; Vite proxies `/api` to the API |
 | `npm run build` / `lint` / `format:check` | run the check in every workspace (`-w apps/web` or `-w apps/api` for one) |
 | `docker compose up --build` | builds both images and serves the web app on http://localhost:8080 and the API on http://localhost:3000 |
+| http://localhost:3000/api/docs | Swagger UI of the API (OpenAPI 3.1 JSON at `/api/docs/json`); also reachable through the web app's origin |
 
 ```
 apps/
@@ -516,7 +517,7 @@ apps/
   api/   Fastify + TypeScript (strict, ESM), compiled with tsc
 ```
 
-Environment variables (all optional): `PORT` (API port, default `3000`), `HOST` (default `0.0.0.0`), `LOG_LEVEL` (default `info`), `API_PROXY_TARGET` (Vite proxy target, default `http://localhost:3000`), `WIKIPEDIA_API_URL` (default `https://en.wikipedia.org/w/api.php`), `UPSTREAM_TIMEOUT_MS` (default `5000`), `BEARS_CACHE_TTL_MS` (default 5 minutes), `ENABLE_DEBUG_ROUTES` (adds `GET /api/debug/error`; default on, off when `NODE_ENV=production`, i.e. in Docker). If ports 3000/8080 are taken on the host, override the published ports with `API_PORT=3300 WEB_PORT=8380 docker compose up --build`.
+Environment variables (all optional): `PORT` (API port, default `3000`), `HOST` (default `0.0.0.0`), `LOG_LEVEL` (default `info`), `API_PROXY_TARGET` (Vite proxy target, default `http://localhost:3000`), `WIKIPEDIA_API_URL` (default `https://en.wikipedia.org/w/api.php`), `UPSTREAM_TIMEOUT_MS` (default `5000`), `BEARS_CACHE_TTL_MS` (default 5 minutes), `ENABLE_DEBUG_ROUTES` (adds `GET /api/debug/error`; default on, off when `NODE_ENV=production`, i.e. in Docker), `CORS_ORIGINS` (comma-separated origins allowed to call the API cross-origin, e.g. `http://localhost:4173`; default none). For the web build: `VITE_API_BASE_URL` (absolute API URL for a build served from another origin; default `/api`). If ports 3000/8080 are taken on the host, override the published ports with `API_PORT=3300 WEB_PORT=8380 docker compose up --build`.
 
 ### Tasks
 
@@ -693,21 +694,7 @@ UPSTREAM_TIMEOUT_MS=1 docker compose up -d api
 curl -i localhost:3000/api/bears                                               # 504
 ```
 
-##### Problem types
-
-The `type` URIs of our own problem types point here. Clients should branch on `type` and `status`, never on `title` or `detail`.
-
-###### Problem type: validation-error
-
-`400`. The request did not match the route's schema. `errors` lists every invalid field: `location` is the part of the request (`body`, `params`, `querystring`, `headers`), `pointer` a JSON pointer (RFC 6901) into it (`""` for the part as a whole, e.g. an unknown key), and `detail` a human-readable reason. Fix the input; retrying unchanged will fail again.
-
-###### Problem type: upstream-unavailable
-
-`502`. Wikipedia could not be reached or answered with something we cannot use. Not caused by the client; retrying later may succeed.
-
-###### Problem type: upstream-timeout
-
-`504`. Wikipedia did not answer within the configured timeout. Not caused by the client; retrying later may succeed.
+The problem types are documented in [Problem types](#problem-types) below the tasks.
 
 **Theory question:** Why exactly one error contract? Which information must never leave the server, and how do request ids connect a complaint to a log line?
 
@@ -726,6 +713,110 @@ The `type` URIs of our own problem types point here. Clients should branch on `t
 This API uses an allow-list instead of a deny-list: only messages of `HttpError`s, which were written for the client, are sent. Everything else becomes "An unexpected error occurred" with status 500, so a new kind of bug cannot leak by accident. The details go into the log, attached to the request id.
 
 **How request ids connect a complaint to a log line:** Each request gets a unique, random id at the very start. Pino writes it as `requestId` into *every* log line of that request: "incoming request", the error with its stack and cause, "request completed". The same id is sent to the client in the `x-request-id` header and in the problem's `instance`/`requestId`, and the UI shows it as "Reference: ...". A user who reports "it failed, reference 6965e5b8-..." therefore gives the operator an exact search key: `docker compose logs api | grep 6965e5b8-...` (or a query in a log system) returns exactly this request's lines, including the stack trace the user never saw. Without the id, the operator would have to guess from a timestamp among thousands of requests. Because the id is a random UUID, it reveals nothing (no request count, no internals) and cannot be guessed. Taking over a valid incoming `x-request-id` allows the same id to be followed across several services (a proxy, the BFF, an upstream), which is the idea that distributed tracing (W3C `traceparent`, OpenTelemetry) generalises.
+
+#### Task 5: CORS and the API contract
+
+Serve the built web app from another origin (e.g. `vite preview` on port 4173 with an absolute API URL) and watch it fail. Add `@fastify/cors` with an allow-list from the environment, only the methods and headers you need. Watch the preflight of a DELETE and of a JSON POST in the network tab. Generate OpenAPI 3.1 from the zod schemas (`@fastify/swagger`) and serve it at `/api/docs`.
+
+**Implementation:**
+
+- **Web** (`apps/web/src/api/client.ts`): the API base URL is `VITE_API_BASE_URL` if set at build time, otherwise the same-origin `/api`. When `fetch` rejects (offline, or a response blocked by CORS), the UI shows "The server could not be reached." instead of the browser's bare "Failed to fetch".
+- **CORS** (`apps/api/src/app.ts`, `config.ts`): `@fastify/cors` only allows the origins listed in `CORS_ORIGINS`; by default no origin is allowed, because the web app talks to the API through its own origin. Every entry must be an exact origin: `http://localhost:4173/` (trailing slash) or `*` stops the API at startup instead of silently never matching.
+
+  | Option | Value | Why |
+  | --- | --- | --- |
+  | `origin` | the allow-list, compared exactly | only our own frontends may read responses |
+  | `methods` | `GET, POST, DELETE` | the methods the API has; no `PUT`/`PATCH` |
+  | `allowedHeaders` | `content-type` | the only non-safelisted header the app sends (`application/json`); `accept` is safelisted |
+  | `exposedHeaders` | `x-request-id` | the UI reads it for its error reference; non-safelisted response headers are hidden from scripts otherwise |
+  | `credentials` | `false` | the API uses no cookies or HTTP auth |
+  | `maxAge` | `600` | the browser may reuse a preflight result for 10 minutes |
+
+  The CORS headers are set in an `onRequest` hook, so error responses carry them too, and the cross-origin UI can read the problem details. `Vary: Origin` keeps caches from serving one origin's answer to another.
+- **OpenAPI** (`apps/api/src/openapi.ts`): `@fastify/swagger` collects all routes, and `fastify-type-provider-zod`'s `jsonSchemaTransform` turns their zod schemas (params, body, responses) into JSON Schema. The document is OpenAPI 3.1.0, Swagger UI is at `/api/docs`, and the JSON at `/api/docs/json`.
+  - The schemas of the contract are named with zod's `.meta({ id })` (`Bear`, `Comment`, `NewCommentInput`, `ProblemDetails`, `FieldError`, `Health`), so they appear once under `components.schemas` and are referenced by `$ref`. Unreferenced variants are pruned.
+  - Every route lists its possible problems (`problemResponses(400, 404, 500, 502, 504)`). A small wrapper around the transform documents them as `application/problem+json` with the `ProblemDetails` schema, adds descriptions and the `x-request-id` header (plus `Location` for 201), and documents the 204 as a response without a body.
+  - These schemas are not just documentation: Fastify uses them to serialize every response, including problems. The code and the document cannot drift apart, because both come from the same zod schemas.
+
+**Watch it fail, then fix it** (Chrome DevTools, Network tab with "Disable cache" so the preflight cache does not hide the preflights):
+
+```sh
+npm run dev -w apps/api                                            # API on :3000, no CORS_ORIGINS
+VITE_API_BASE_URL=http://localhost:3000/api npm run build -w apps/web
+npm run preview -w apps/web                                         # web app on http://localhost:4173
+# open http://localhost:4173: "The server could not be reached."; the console says
+# "blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present"
+
+CORS_ORIGINS=http://localhost:4173 npm run dev -w apps/api           # restart the API with the allow-list
+# reload: bears load; add and delete a comment on a bear's page
+```
+
+What the network tab shows (recorded with headless Chrome against the API):
+
+| Request | Without allow-list | With `CORS_ORIGINS=http://localhost:4173` |
+| --- | --- | --- |
+| `GET /api/bears` | blocked: `MissingAllowOriginHeader` (the server did answer 200) | `200`, no preflight (simple request) |
+| `OPTIONS /api/bears/ursus-arctos/comments` (preflight of the JSON POST) | - | `204`, `Access-Control-Allow-Methods: GET, POST, DELETE`, `Allow-Headers: content-type` |
+| `POST /api/bears/ursus-arctos/comments` | - | `201` |
+| `OPTIONS /api/comments/{id}` (preflight of the DELETE) | - | `204` |
+| `DELETE /api/comments/{id}` | - | `204` |
+
+The same with curl:
+
+```sh
+curl -i -X OPTIONS localhost:3000/api/comments/00000000-0000-4000-8000-000000000000 \
+  -H 'origin: http://localhost:4173' -H 'access-control-request-method: DELETE'
+curl -i -X OPTIONS localhost:3000/api/bears/ursus-arctos/comments \
+  -H 'origin: http://localhost:4173' -H 'access-control-request-method: POST' \
+  -H 'access-control-request-headers: content-type'
+curl -i -X OPTIONS localhost:3000/api/bears/ursus-arctos/comments \
+  -H 'origin: http://evil.example' -H 'access-control-request-method: POST'   # no Access-Control-Allow-Origin
+```
+
+In Docker, `CORS_ORIGINS=http://localhost:4173 docker compose up --build` passes the allow-list to the API container.
+
+**Theory question:** Who enforces CORS? Simple vs preflighted requests? Why no `*` with credentials, and why does a BFF make most CORS problems disappear?
+
+**Answer:**
+
+**Who enforces CORS:** the browser. The server only *declares*, with `Access-Control-Allow-*` headers, which other origins may read its responses. The browser's fetch implementation compares those headers with the page's origin and hides the response from the script if they do not match. curl, Postman and other servers ignore CORS entirely: the curl commands above get the full response from any "origin". Two consequences:
+
+- CORS does not protect the server, it protects the *user*. It stops a malicious site, running in the user's browser with the user's cookies and network access (intranet, localhost), from reading data it could not fetch itself. Authentication and authorisation still have to happen on the server.
+- CORS relaxes the same-origin policy; it does not add restrictions. Without any CORS headers, cross-origin reads are already forbidden.
+
+The blocked `GET /api/bears` above shows this: the API answered `200` (it is in the API log), and only the browser refused to hand it to the page.
+
+**Simple vs preflighted requests:**
+
+- **Simple requests** use `GET`, `HEAD` or `POST`, with only CORS-safelisted headers (`Accept`, `Accept-Language`, `Content-Language`, and `Content-Type` limited to `text/plain`, `multipart/form-data` or `application/x-www-form-urlencoded`). These are exactly the requests an HTML form or an `<img>` could always send cross-origin. The browser sends them directly with an `Origin` header and checks `Access-Control-Allow-Origin` on the response. The request *reaches the server and is executed* even if the check then fails, so CORS is no protection against such side effects (that is CSRF territory).
+- **Everything else is preflighted:** other methods (`DELETE`, `PUT`, `PATCH`), other content types (`application/json`), custom headers (`Authorization`, `X-Request-Id`). The browser first sends `OPTIONS` with `Access-Control-Request-Method` and `Access-Control-Request-Headers`, and sends the real request only if the answer allows the origin, the method and the headers. `Access-Control-Max-Age` lets it cache that answer.
+
+In this app, the `GET`s are simple and the JSON `POST` and the `DELETE` are preflighted, as the table shows. Requiring `application/json` therefore protects the comment API against cross-site form posts: a `text/plain` POST, which would need no preflight, is rejected with `400` because the body is not a JSON object.
+
+**Why no `*` with credentials:** with `credentials: 'include'`, the browser attaches the user's cookies, HTTP auth or client certificate, i.e. the user's identity. If `Access-Control-Allow-Origin: *` were allowed with that, *any* website the user visits could call the API as the logged-in user and read the private answer (account data, messages, CSRF tokens). The spec therefore forbids the combination: for credentialed requests the browser requires the exact origin in `Access-Control-Allow-Origin` together with `Access-Control-Allow-Credentials: true`, so the server must decide origin by origin. `*` is only acceptable for public, cookie-less data. Blindly reflecting the request's `Origin` header would bypass that rule and is just as dangerous; hence an explicit allow-list (and `Vary: Origin`, so caches keep the answers per origin). This API uses no credentials at all and still only allows listed origins.
+
+**Why a BFF makes most CORS problems disappear:** CORS only applies when a *browser* reads from a *different* origin.
+
+- **Browser to BFF:** the BFF is served under the frontend's own origin (`/api` through the Vite proxy in dev and nginx in Docker), so every request is same-origin. There are no CORS headers to configure, no preflights (one round trip less per `POST`/`DELETE`), and cookies can stay first-party.
+- **BFF to upstream:** these are server-to-server calls, which CORS does not apply to. Upstreams that do not support CORS at all become usable, and Playground 3's `origin=*` workaround for Wikipedia is gone.
+
+CORS is only needed when a frontend deliberately lives on another origin than its API: like the 4173 demo, an `api.example.com` subdomain, or third-party browser clients. Then it is one allow-list in one place.
+
+### Problem types
+
+The `type` URIs of our own problem types (Task 4) point here. Clients should branch on `type` and `status`, never on `title` or `detail`. The machine-readable schema is `ProblemDetails` in the OpenAPI document at `/api/docs`.
+
+#### Problem type: validation-error
+
+`400`. The request did not match the route's schema. `errors` lists every invalid field: `location` is the part of the request (`body`, `params`, `querystring`, `headers`), `pointer` a JSON pointer (RFC 6901) into it (`""` for the part as a whole, e.g. an unknown key), and `detail` a human-readable reason. Fix the input; retrying unchanged will fail again.
+
+#### Problem type: upstream-unavailable
+
+`502`. Wikipedia could not be reached or answered with something we cannot use. Not caused by the client; retrying later may succeed.
+
+#### Problem type: upstream-timeout
+
+`504`. Wikipedia did not answer within the configured timeout. Not caused by the client; retrying later may succeed.
 
 ---
 
