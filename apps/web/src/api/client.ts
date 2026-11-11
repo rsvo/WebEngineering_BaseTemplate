@@ -15,6 +15,12 @@ export class ApiError extends Error {
   }
 }
 
+interface RequestOptions {
+  method?: 'GET' | 'POST' | 'DELETE';
+  body?: unknown;
+  signal?: AbortSignal;
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
   try {
     const body: unknown = await response.json();
@@ -32,25 +38,53 @@ async function readErrorMessage(response: Response): Promise<string> {
   return `The request failed (HTTP ${response.status}).`;
 }
 
-// Fetches a path below the API and validates the JSON response with `schema`,
-// so the rest of the app only ever sees data that matches its type.
-export async function getJson<T>(
+async function send(
   path: string,
-  schema: z.ZodType<T>,
-  signal?: AbortSignal
-): Promise<T> {
+  { method = 'GET', body, signal }: RequestOptions
+): Promise<Response> {
+  const headers: Record<string, string> = { accept: 'application/json' };
+  if (body !== undefined) headers['content-type'] = 'application/json';
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { accept: 'application/json' },
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });
 
   if (!response.ok) {
     throw new ApiError(response.status, await readErrorMessage(response));
   }
+  return response;
+}
 
+// Sends a request below the API and validates the JSON response with `schema`,
+// so the rest of the app only ever sees data that matches its type.
+export async function requestJson<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  options: RequestOptions = {}
+): Promise<T> {
+  const response = await send(path, options);
   const parsed = schema.safeParse(await response.json());
   if (!parsed.success) {
     throw new Error('The server sent data in an unexpected format.');
   }
   return parsed.data;
+}
+
+// For responses without a body, such as 204 No Content.
+export async function requestNoContent(
+  path: string,
+  options: RequestOptions = {}
+): Promise<void> {
+  await send(path, options);
+}
+
+export async function getJson<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  signal?: AbortSignal
+): Promise<T> {
+  return await requestJson(path, schema, { signal });
 }

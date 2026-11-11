@@ -282,6 +282,24 @@ audio {
   cursor: pointer;
 }
 
+.delete-comment {
+  align-self: center;
+  margin-left: 1rem;
+  font-size: 1.4rem;
+  line-height: 28px;
+  padding: 0 1rem;
+  background: #7a1515;
+  border: 0;
+  color: white;
+  cursor: pointer;
+}
+
+.delete-comment:disabled,
+.comment-form input[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .error-message[hidden] {
   display: none;
 }

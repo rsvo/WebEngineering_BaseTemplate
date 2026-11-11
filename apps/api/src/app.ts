@@ -10,6 +10,8 @@ import {
   type WikipediaClient,
 } from './bears/wikipedia.js';
 import type { Config } from './config.js';
+import { commentRoutes } from './comments/routes.js';
+import { CommentStore } from './comments/store.js';
 import { healthRoutes } from './routes/health.js';
 
 export interface AppDependencies {
@@ -44,9 +46,11 @@ export function buildApp(
   const wikipedia =
     dependencies.wikipedia ?? createWikipediaClient(config.wikipedia);
   const bears = createBearService(wikipedia, app.log, config.bearsCacheTtlMs);
+  const comments = new CommentStore();
 
   void app.register(healthRoutes);
   void app.register(bearRoutes, { prefix: '/api', bears });
+  void app.register(commentRoutes, { prefix: '/api', bears, comments });
 
   return app;
 }

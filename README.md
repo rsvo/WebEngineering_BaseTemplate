@@ -576,6 +576,62 @@ The browser keeps rendering, UI state and a light validation of our own contract
 
 `502 Bad Gateway` says precisely "I am fine, but the server I depend on gave me no usable answer", `504 Gateway Timeout` says "it did not answer in time", and both differ from `500` ("I have a bug"). Clients can show an error and retry, caches do not store them as content, and dashboards show the outage.
 
+#### Task 3: Design the comments API
+
+Provide `GET` and `POST /api/bears/:id/comments` and `DELETE /api/comments/:commentId`. `POST` answers `201 Created` with `Location`, `DELETE` answers `204 No Content`. Validate with zod (author and text non-empty, sensible length limits): 400 for invalid input, 404 for unknown bears or comments. Store comments in memory (a `Map`) and connect the comment section of the React app.
+
+**Implementation** (`apps/api/src/comments/`):
+
+| Method and path | Success | Errors |
+| --- | --- | --- |
+| `GET /api/bears/:id/comments` | `200` list (oldest first, `[]` if none) | `400` invalid bear id, `404` unknown bear |
+| `POST /api/bears/:id/comments` | `201` comment + `Location: /api/comments/{id}` | `400` invalid body, `404` unknown bear |
+| `GET /api/comments/:commentId` | `200` comment | `400` not a UUID, `404` unknown comment |
+| `DELETE /api/comments/:commentId` | `204` no body | `400` not a UUID, `404` unknown comment |
+
+- `schema.ts`: the request body is a strict zod object: `author` 1-80 and `text` 1-1000 characters after trimming, unknown fields are rejected. The server assigns `id` (UUID), `bearId` and `createdAt`; the client cannot set them.
+- `store.ts`: a `Map<commentId, Comment>`. Keying by comment id makes `DELETE /api/comments/:commentId` an O(1) lookup without knowing the bear; listing filters by `bearId`.
+- `GET /api/comments/:commentId` exists so that the `Location` header points to something that can actually be fetched.
+- Comments belong to a bear now, so the comment section moved from the home page to the bear detail page (`/bears/:bearId`). The form disables its submit button while a request is in flight, keeps the input if the request fails and shows the API's message; each comment has a delete button.
+
+Try it (with the API on port 3000):
+
+```sh
+curl -i -X POST localhost:3000/api/bears/ursus-arctos/comments \
+  -H 'content-type: application/json' -d '{"author":"Bob","text":"Big brown angry guy"}'   # 201 + Location
+curl -i localhost:3000/api/bears/ursus-arctos/comments                                  # 200
+curl -i -X POST localhost:3000/api/bears/ursus-arctos/comments \
+  -H 'content-type: application/json' -d '{"author":"   ","text":""}'                     # 400
+curl -i -X POST localhost:3000/api/bears/ursus-nope/comments \
+  -H 'content-type: application/json' -d '{"author":"Bob","text":"Hi"}'                  # 404 (bear)
+curl -i -X DELETE localhost:3000/api/comments/<id from Location>                         # 204
+curl -i -X DELETE localhost:3000/api/comments/<same id>                                  # 404 (comment)
+```
+
+**Why comments survive a page reload but not an API restart:** The browser does not store comments at all; on every load the detail page asks the API for them again. The comments live in the `Map` inside the API process's memory, which outlives any number of page reloads. Restarting the API (`docker compose restart api`, or `tsx watch` restarting after a file change) starts a new process with a new, empty `Map`; nothing was written to disk. For the same reason, running two API replicas would give each its own different set of comments. Persisting them needs storage outside the process, such as a database.
+
+**Theory question:** Safe, idempotent, cacheable methods. Why POST for creating, why must DELETE be idempotent, what happens when a client retries a POST?
+
+**Answer:**
+
+**The three properties** (RFC 9110, section 9.2):
+
+- **Safe:** the client does not request any change of server state; it is read-only from the client's point of view. `GET`, `HEAD`, `OPTIONS`. Crawlers, prefetchers and link previews may call safe methods freely.
+- **Idempotent:** sending the same request N times has the same *effect on the server* as sending it once. All safe methods, plus `PUT` and `DELETE`. `POST` and `PATCH` are not.
+- **Cacheable:** a response may be stored and reused for later requests. Responses to `GET` and `HEAD` are cacheable by default; `POST` responses only with explicit freshness information and `Content-Location`, which almost no cache implements.
+
+| Our route | Safe | Idempotent | Cacheable |
+| --- | --- | --- | --- |
+| `GET /api/bears/:id/comments` | yes | yes | yes |
+| `POST /api/bears/:id/comments` | no | no | no |
+| `DELETE /api/comments/:commentId` | no | yes | no |
+
+**Why POST for creating:** The server chooses the new comment's identity (a UUID), so the client cannot know the new URL beforehand and cannot `PUT` to it. `POST` means "process this representation according to the target's own semantics", which for a collection means "add a new member". Two identical POSTs are allowed to create two comments, and they do. The `201 Created` response with `Location: /api/comments/{id}` then tells the client where the new resource lives. (The alternative would be a client-generated id with `PUT /api/comments/{id}`, which is idempotent, but makes the client responsible for unique ids.)
+
+**Why DELETE must be idempotent:** A request can fail *after* the server processed it, for example when the connection drops before the response arrives. The client then cannot tell whether the delete happened. Because DELETE is idempotent, it may simply send it again: the end state is "the comment is gone" either way. The spec makes this a promise, so browsers, proxies and HTTP libraries are allowed to retry idempotent requests automatically. Idempotency is about the state, not the response: the first `DELETE` answers `204`, the second `404`, and both leave the server in the same state. The frontend treats a `404` on delete as success for that reason.
+
+**What happens when a client retries a POST:** If the first POST was processed but its response was lost, the retry creates a **second, duplicate comment** with a different id. That is why browsers ask "Confirm form resubmission" on reload and never retry a POST automatically, and why `fetch` doesn't either. Mitigations: prevent accidental double submits (our form disables its button while a request is in flight), use POST/redirect/GET for classic forms, or make the creation idempotent with an `Idempotency-Key` header (the server remembers the key and replays the first response instead of creating again) or a client-chosen id with `PUT`.
+
 ---
 
 ## In-Class Accessibility Workshop

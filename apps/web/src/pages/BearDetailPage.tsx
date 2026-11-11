@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { Link, useParams } from 'react-router';
 import { BearDetail } from '../features/bears/BearDetail';
 import { useBear } from '../features/bears/useBear';
+import { CommentsSection } from '../features/comments/CommentsSection';
 
 interface BearDetailPageProps {
   query: string;
@@ -36,7 +37,15 @@ export function BearDetailPage({ query }: BearDetailPageProps): ReactElement {
       )}
 
       {state.status === 'success' && (
-        <BearDetail key={state.bear.id} bear={state.bear} query={query} />
+        <>
+          <BearDetail key={state.bear.id} bear={state.bear} query={query} />
+          {/* Keyed by bear, so switching bears also resets the section. */}
+          <CommentsSection
+            key={`comments-${state.bear.id}`}
+            bearId={state.bear.id}
+            query={query}
+          />
+        </>
       )}
     </article>
   );

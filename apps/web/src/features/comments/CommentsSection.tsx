@@ -2,24 +2,19 @@ import { useState, type ReactElement } from 'react';
 import { Highlight } from '../search/Highlight';
 import { CommentForm } from './CommentForm';
 import { CommentList } from './CommentList';
-import { INITIAL_COMMENTS } from './constants';
-import type { CommentEntry } from './types';
+import { useComments } from './useComments';
 
 interface CommentsSectionProps {
+  bearId: string;
   query: string;
 }
 
-export function CommentsSection({ query }: CommentsSectionProps): ReactElement {
+export function CommentsSection({
+  bearId,
+  query,
+}: CommentsSectionProps): ReactElement {
   const [isOpen, setIsOpen] = useState(false);
-  const [comments, setComments] =
-    useState<readonly CommentEntry[]>(INITIAL_COMMENTS);
-
-  function handleAdd(author: string, text: string): void {
-    setComments((previous) => [
-      ...previous,
-      { id: crypto.randomUUID(), author, text },
-    ]);
-  }
+  const { state, reload, add, remove } = useComments(bearId);
 
   return (
     <section className="comments">
@@ -36,12 +31,29 @@ export function CommentsSection({ query }: CommentsSectionProps): ReactElement {
         <font size="6">
           <Highlight text="Add comment" query={query} />
         </font>
-        <CommentForm onAdd={handleAdd} />
+        <CommentForm onAdd={add} />
 
         <font size="6">
           <Highlight text="Comments" query={query} />
         </font>
-        <CommentList comments={comments} query={query} />
+        {state.status === 'loading' && <p role="status">Loading comments...</p>}
+        {state.status === 'error' && (
+          <>
+            <p className="error-message" role="alert">
+              {state.message}
+            </p>
+            <button type="button" className="retry" onClick={reload}>
+              Try again
+            </button>
+          </>
+        )}
+        {state.status === 'success' && (
+          <CommentList
+            comments={state.comments}
+            query={query}
+            onDelete={remove}
+          />
+        )}
       </div>
     </section>
   );
