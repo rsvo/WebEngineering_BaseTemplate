@@ -6,6 +6,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      # Empty means "use the default"; set e.g.
+      # WIKIPEDIA_API_URL=https://en.wikipedia.invalid/w/api.php to block the
+      # upstream and see the 502 error state.
+      WIKIPEDIA_API_URL: ${WIKIPEDIA_API_URL:-}
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-}
     ports:
       - '${API_PORT:-3000}:3000'
     # Docker itself calls /health and marks the container (un)healthy; `web`

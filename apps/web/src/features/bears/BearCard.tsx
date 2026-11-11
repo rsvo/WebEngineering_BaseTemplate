@@ -2,17 +2,17 @@ import type { ReactElement } from 'react';
 import { Link } from 'react-router';
 import { Highlight } from '../search/Highlight';
 import { BearImage } from './BearImage';
-import type { BearWithImage } from './types';
+import type { Bear } from './types';
 
 interface BearCardProps {
-  bear: BearWithImage;
+  bear: Bear;
   query: string;
 }
 
 export function BearCard({ bear, query }: BearCardProps): ReactElement {
   return (
     <div className="bear">
-      <BearImage src={bear.image} alt={`Image of ${bear.name}`} />
+      <BearImage src={bear.imageUrl} alt={`Image of ${bear.name}`} />
       <p>
         <b>
           <Link to={`/bears/${bear.id}`}>

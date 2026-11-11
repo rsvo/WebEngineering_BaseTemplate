@@ -516,7 +516,7 @@ apps/
   api/   Fastify + TypeScript (strict, ESM), compiled with tsc
 ```
 
-Environment variables (all optional): `PORT` (API port, default `3000`), `HOST` (default `0.0.0.0`), `LOG_LEVEL` (default `info`), `API_PROXY_TARGET` (Vite proxy target, default `http://localhost:3000`). If ports 3000/8080 are taken on the host, override the published ports with `API_PORT=3300 WEB_PORT=8380 docker compose up --build`.
+Environment variables (all optional): `PORT` (API port, default `3000`), `HOST` (default `0.0.0.0`), `LOG_LEVEL` (default `info`), `API_PROXY_TARGET` (Vite proxy target, default `http://localhost:3000`), `WIKIPEDIA_API_URL` (default `https://en.wikipedia.org/w/api.php`), `UPSTREAM_TIMEOUT_MS` (default `5000`), `BEARS_CACHE_TTL_MS` (default 5 minutes). If ports 3000/8080 are taken on the host, override the published ports with `API_PORT=3300 WEB_PORT=8380 docker compose up --build`.
 
 ### Tasks
 
@@ -535,6 +535,46 @@ Use npm workspaces with `apps/web` (the React app) and `apps/api` (Fastify, Type
 **What a health endpoint is for:** It lets something outside the process ask "are you alive and able to serve?" without knowing the domain API. `GET /health` is cheap, has no side effects, is not cached (`cache-control: no-store`), and reports `status`, the running `version` (which build is deployed?) and `uptime` (a small value means the process was restarted recently). It deliberately does not call Wikipedia: if an upstream outage made the API "unhealthy", an orchestrator would restart a perfectly working process.
 
 **Who calls it:** machines, not users. Here Docker does: the `healthcheck` in `compose.yaml` calls it every 10 s, and `web` only starts once `api` is `healthy`; the CI smoke test calls it after `docker compose up --wait`. In production, Kubernetes liveness/readiness probes, load balancers (they stop routing to failing instances) and uptime monitors call it. This ties back to the event loop: if the loop is blocked, `/health` times out too, and the container is reported unhealthy.
+
+#### Task 2: Move the Wikipedia call behind a BFF
+
+Provide `GET /api/bears` and `GET /api/bears/:id`, fetched and parsed server-side. Send a descriptive User-Agent (Wikimedia policy) and use a timeout on the upstream call. Return a normalised, typed `Bear` (id = stable slug of the binomial name), validated with zod. On upstream failure answer 502 or 504, never an empty list; the browser no longer talks to Wikipedia.
+
+**Implementation** (`apps/api/src/bears/`):
+
+- `wikipedia.ts` calls the MediaWiki API with a User-Agent naming the app, its version and the repository as contact, and `AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)`. Responses are validated with zod. Unreachable host, non-2xx, invalid JSON, a MediaWiki `error` object or an unexpected shape become `UpstreamError` 502; a timeout becomes 504.
+- `parse.ts` turns the wikitext into bears. The rows only contain abbreviated names (`U. arctos`), so the genus of the enclosing species table is used to rebuild the full binomial (`Ursus arctos`), and the id is its slug (`ursus-arctos`). The Playground 3 id `u-arctos` was ambiguous (`U.` could be any genus) and is no longer used.
+- `service.ts` resolves all images with **one** batched `imageinfo` request (640 px thumbnails instead of the originals) and caches successful results for 5 minutes; concurrent cache misses share one upstream request. Zero parsed bears is a 502, not `[]`. A failed image lookup only degrades to `imageUrl: null` (the frontend shows its placeholder).
+- `routes.ts` declares zod schemas for params and responses: an invalid id is a 400, an unknown id a 404, and responses that would violate the `Bear` contract cannot be sent.
+
+The web app no longer contains any Wikipedia code: `useBears` calls `/api/bears`, the detail page calls `/api/bears/:id`, and `api/client.ts` validates the responses with zod. Only the image files themselves are still loaded by the browser from Wikimedia's image CDN (`upload`/`thumb.wikimedia.org`) via `<img>`; proxying image bytes through our API would only add latency and bandwidth.
+
+Try it: `curl -i localhost:3000/api/bears/ursus-arctos` (200), `/api/bears/ursus-nope` (404), `/api/bears/Not_A_Slug` (400); start the API with `WIKIPEDIA_API_URL=https://en.wikipedia.invalid/w/api.php` for a 502 (the UI shows its error state with "Try again") or with `UPSTREAM_TIMEOUT_MS=1` for a 504.
+
+**Theory question:** What is a BFF, and what moves from the browser to the server? Why is an empty 200 on upstream failure worse than a 502?
+
+**Answer:**
+
+**Backend for Frontend:** A BFF is a server-side layer that belongs to one specific frontend and is shaped by its needs. The browser talks only to its BFF, in the BFF's own vocabulary (`Bear`), and the BFF talks to the upstream systems (here Wikipedia) in theirs. It is not a general-purpose API for everyone; if a mobile app needed different data, it would get its own BFF.
+
+**What moves from the browser to the server:**
+
+- **Knowledge of the upstream:** URLs, query parameters, the wikitext format and the regex parsing. Before, every browser downloaded and parsed wikitext; now the browser receives a list of eight ready-to-render objects, and a change on Wikipedia's side is fixed in one place without redeploying the frontend.
+- **Aggregation:** the browser used to send 1 + 8 requests to Wikipedia (list plus one per image); now it sends one request, and the server needs two upstream calls in total thanks to batching.
+- **Validation and normalisation** of untrusted upstream data into a typed contract, and the mapping of upstream failures to meaningful status codes.
+- **Operational concerns:** the User-Agent policy (a browser cannot even set `User-Agent`), timeouts, caching shared by all users (fewer requests to Wikimedia), logging of the real cause (`ENOTFOUND`) where operators can see it, and, if an upstream required one, the API key, which can never be kept secret in a browser.
+- **Cross-origin access:** the `origin=*` parameter that Wikipedia needed for CORS is gone; the browser only talks to its own origin.
+
+The browser keeps rendering, UI state and a light validation of our own contract.
+
+**Why an empty 200 is worse than a 502:** A status code is a statement. `200 []` says "I succeeded, and there are no bears", which is false; the truth is "I do not know, because my upstream failed". With the lie:
+
+- the UI shows "No bears were found" instead of an error with "Try again", so the user believes the data is gone, and nobody retries;
+- caches (browser, CDN, our own cache) may store the 200 and keep serving the empty list after Wikipedia has recovered;
+- monitoring and alerts that count 5xx see 100 % success, so the outage is invisible to operators;
+- clients cannot distinguish "empty" from "broken", which are different states with different handling (our `BearsGate` has both).
+
+`502 Bad Gateway` says precisely "I am fine, but the server I depend on gave me no usable answer", `504 Gateway Timeout` says "it did not answer in time", and both differ from `500` ("I have a bug"). Clients can show an error and retry, caches do not store them as content, and dashboards show the outage.
 
 ---
 

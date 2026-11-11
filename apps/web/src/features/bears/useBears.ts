@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { messageFromError } from '../../utils/errors';
-import { loadBears } from './loadBears';
-import type { BearWithImage } from './types';
+import { fetchBears } from './api';
+import type { Bear } from './types';
 
 export type BearsState =
   | { status: 'loading' }
-  | { status: 'success'; bears: readonly BearWithImage[] }
+  | { status: 'success'; bears: readonly Bear[] }
   | { status: 'empty' }
   | { status: 'error'; message: string };
 
@@ -23,7 +23,7 @@ export function useBears(): UseBears {
 
     async function load(): Promise<void> {
       try {
-        const bears = await loadBears(controller.signal);
+        const bears = await fetchBears(controller.signal);
         if (controller.signal.aborted) return;
         setState(
           bears.length === 0

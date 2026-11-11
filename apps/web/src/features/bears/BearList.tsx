@@ -1,9 +1,9 @@
 import type { ReactElement } from 'react';
-import type { BearWithImage } from './types';
+import type { Bear } from './types';
 import { BearCard } from './BearCard';
 
 interface BearListProps {
-  bears: readonly BearWithImage[];
+  bears: readonly Bear[];
   query: string;
 }
 

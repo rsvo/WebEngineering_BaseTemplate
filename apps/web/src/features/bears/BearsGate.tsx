@@ -1,11 +1,11 @@
 import type { ReactElement } from 'react';
 import type { BearsState } from './useBears';
-import type { BearWithImage } from './types';
+import type { Bear } from './types';
 
 interface BearsGateProps {
   state: BearsState;
   onRetry: () => void;
-  children: (bears: readonly BearWithImage[]) => ReactElement;
+  children: (bears: readonly Bear[]) => ReactElement;
 }
 
 // Renders the loading, empty and error states of the bear data, and hands the

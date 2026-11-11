@@ -1,25 +1,5 @@
-import { readFileSync } from 'node:fs';
 import type { FastifyInstance } from 'fastify';
-
-// `../../package.json` resolves to apps/api/package.json both from src/routes
-// (tsx) and from dist/routes (node), so the reported version always matches the
-// code that is actually running.
-function readVersion(): string {
-  const raw: unknown = JSON.parse(
-    readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
-  );
-  if (
-    typeof raw === 'object' &&
-    raw !== null &&
-    'version' in raw &&
-    typeof raw.version === 'string'
-  ) {
-    return raw.version;
-  }
-  return 'unknown';
-}
-
-const VERSION = readVersion();
+import { VERSION } from '../version.js';
 
 export interface HealthResponse {
   status: 'ok';

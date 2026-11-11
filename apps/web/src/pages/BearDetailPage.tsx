@@ -1,40 +1,43 @@
 import type { ReactElement } from 'react';
 import { Link, useParams } from 'react-router';
 import { BearDetail } from '../features/bears/BearDetail';
-import { BearsGate } from '../features/bears/BearsGate';
-import type { BearsState } from '../features/bears/useBears';
+import { useBear } from '../features/bears/useBear';
 
 interface BearDetailPageProps {
-  bearsState: BearsState;
-  onRetry: () => void;
   query: string;
 }
 
-export function BearDetailPage({
-  bearsState,
-  onRetry,
-  query,
-}: BearDetailPageProps): ReactElement {
-  const { bearId } = useParams();
+export function BearDetailPage({ query }: BearDetailPageProps): ReactElement {
+  const { bearId = '' } = useParams();
+  const { state, reload } = useBear(bearId);
 
   return (
     <article className="bear-detail">
-      <BearsGate state={bearsState} onRetry={onRetry}>
-        {(bears) => {
-          const bear = bears.find((candidate) => candidate.id === bearId);
-          if (bear === undefined) {
-            return (
-              <>
-                <p role="alert">There is no bear with the id “{bearId}”.</p>
-                <p>
-                  <Link to="/">Back to all bears</Link>
-                </p>
-              </>
-            );
-          }
-          return <BearDetail key={bear.id} bear={bear} query={query} />;
-        }}
-      </BearsGate>
+      {state.status === 'loading' && <p role="status">Loading bear...</p>}
+
+      {state.status === 'not-found' && (
+        <>
+          <p role="alert">There is no bear with the id “{bearId}”.</p>
+          <p>
+            <Link to="/">Back to all bears</Link>
+          </p>
+        </>
+      )}
+
+      {state.status === 'error' && (
+        <>
+          <p className="error-message" role="alert">
+            {state.message}
+          </p>
+          <button type="button" className="retry" onClick={reload}>
+            Try again
+          </button>
+        </>
+      )}
+
+      {state.status === 'success' && (
+        <BearDetail key={state.bear.id} bear={state.bear} query={query} />
+      )}
     </article>
   );
 }

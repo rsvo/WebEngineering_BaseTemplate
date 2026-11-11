@@ -17,7 +17,8 @@ export function App(): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = (searchParams.get('q') ?? '').trim();
 
-  // The list and the detail page both need the bears, so App loads them once.
+  // Loaded once in App (not in HomePage), so returning from a detail page
+  // shows the list immediately instead of loading it again.
   const { state: bearsState, reload } = useBears();
 
   function handleSearch(nextQuery: string): void {
@@ -45,13 +46,7 @@ export function App(): ReactElement {
           />
           <Route
             path="/bears/:bearId"
-            element={
-              <BearDetailPage
-                bearsState={bearsState}
-                onRetry={reload}
-                query={query}
-              />
-            }
+            element={<BearDetailPage query={query} />}
           />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

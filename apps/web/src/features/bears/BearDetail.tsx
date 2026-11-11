@@ -2,10 +2,10 @@ import type { ReactElement } from 'react';
 import { Link } from 'react-router';
 import { Highlight } from '../search/Highlight';
 import { BearImage } from './BearImage';
-import type { BearWithImage } from './types';
+import type { Bear } from './types';
 
 interface BearDetailProps {
-  bear: BearWithImage;
+  bear: Bear;
   query: string;
 }
 
@@ -15,7 +15,7 @@ export function BearDetail({ bear, query }: BearDetailProps): ReactElement {
       <font size="6">
         <Highlight text={bear.name} query={query} />
       </font>
-      <BearImage src={bear.image} alt={`Image of ${bear.name}`} />
+      <BearImage src={bear.imageUrl} alt={`Image of ${bear.name}`} />
       <p>
         <b>
           <Highlight text="Scientific name: " query={query} />

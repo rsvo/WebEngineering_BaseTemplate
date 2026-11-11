@@ -2,7 +2,8 @@ import { useState, type ReactElement } from 'react';
 import { PLACEHOLDER_IMAGE } from './constants';
 
 interface BearImageProps {
-  src: string;
+  // null when the API could not resolve an image for this bear.
+  src: string | null;
   alt: string;
 }
 
@@ -11,7 +12,7 @@ export function BearImage({ src, alt }: BearImageProps): ReactElement {
 
   return (
     <img
-      src={failed ? PLACEHOLDER_IMAGE : src}
+      src={failed || src === null ? PLACEHOLDER_IMAGE : src}
       alt={alt}
       onError={() => {
         setFailed(true);
