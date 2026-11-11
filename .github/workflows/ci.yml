@@ -6,7 +6,12 @@ on:
 
 jobs:
   quality-gate:
+    name: quality-gate (${{ matrix.workspace }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: [apps/web, apps/api]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -14,17 +19,42 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build
-        run: npm run build
+        run: npm run build --workspace ${{ matrix.workspace }}
 
       - name: Lint
-        run: npm run lint
+        run: npm run lint --workspace ${{ matrix.workspace }}
 
       - name: Check formatting
-        run: npm run format:check
+        run: npm run format:check --workspace ${{ matrix.workspace }}
+
+  docker:
+    name: docker compose smoke test
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and start the stack
+        run: docker compose up --build --detach --wait
+
+      - name: Check the API health endpoint
+        run: curl --fail --silent --show-error --include http://localhost:3000/health
+
+      - name: Check the web app
+        run: curl --fail --silent --show-error --output /dev/null http://localhost:8080/
+
+      - name: Show logs
+        if: always()
+        run: docker compose logs
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down

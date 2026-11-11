@@ -1,28 +1,19 @@
 root: true
 
-env:
-  browser: true
-  es2022: true
-
+# Shared rules for every workspace. apps/web and apps/api add their own
+# environment (browser + React vs. Node) in their own .eslintrc.yml.
 parserOptions:
-  project: './tsconfig.json'
+  # Use the tsconfig.json closest to each linted file, so the same config works
+  # from the workspace directories and from lint-staged at the repository root.
+  project: true
   sourceType: module
   ecmaVersion: latest
-  ecmaFeatures:
-    jsx: true
 
 extends:
   - standard-with-typescript
   - plugin:@typescript-eslint/recommended
-  - plugin:react/recommended
-  - plugin:react/jsx-runtime
-  - plugin:react-hooks/recommended
   - plugin:prettier/recommended
   - prettier
-
-settings:
-  react:
-    version: detect
 
 ignorePatterns:
   - dist

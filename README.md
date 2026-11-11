@@ -18,6 +18,7 @@ The project introduces a lot of code smells for you to tackle.
 * [1st Playground](#1-js-playground): 14.09.2026
 * [2nd Playground](#2-dependency--and-build-management-playground): 28.09.2026
 * [3rd Playground](#3-migrate-to-a-frontend-framework): 04.10.2026
+* [4th Playground](#4-backend-for-frontend-and-http-apis): 12.11.2026
 * other Playgrounds TBA by Thomas Berger
 
 ## Features
@@ -496,6 +497,44 @@ Add at least a list route and a bear-detail route using a stable bear identifier
 **One benefit:** Navigation does not reload the page, and state and data stay in memory. The bears are loaded once in `App` and shared, so going from the list to a detail page causes no new request.
 
 **One cost:** The server only has one real page, so a deep link such as `/bears/sun-bear` must be answered with `index.html` (a fallback rule), otherwise a reload or a shared link gives a 404. The Vite dev server does this by itself, but plain static hosting has to be configured for it.
+
+## 4. Backend for Frontend and HTTP APIs
+In this playground the repository becomes an npm workspace with two apps: the React app from Playground 3 (`apps/web`) and a Fastify API (`apps/api`) that the web app talks to.
+
+### Running the project
+
+| Command | What it does |
+| --- | --- |
+| `npm install` | installs both workspaces from the shared `package-lock.json` |
+| `npm run dev` | starts the API (`tsx watch`, restarts on change) and Vite (HMR) in parallel; Vite proxies `/api` to the API |
+| `npm run build` / `lint` / `format:check` | run the check in every workspace (`-w apps/web` or `-w apps/api` for one) |
+| `docker compose up --build` | builds both images and serves the web app on http://localhost:8080 and the API on http://localhost:3000 |
+
+```
+apps/
+  web/   React + Vite (Playground 3), served by nginx in Docker
+  api/   Fastify + TypeScript (strict, ESM), compiled with tsc
+```
+
+Environment variables (all optional): `PORT` (API port, default `3000`), `HOST` (default `0.0.0.0`), `LOG_LEVEL` (default `info`), `API_PROXY_TARGET` (Vite proxy target, default `http://localhost:3000`). If ports 3000/8080 are taken on the host, override the published ports with `API_PORT=3300 WEB_PORT=8380 docker compose up --build`.
+
+### Tasks
+
+#### Task 1: Set up the API workspace
+
+Use npm workspaces with `apps/web` (the React app) and `apps/api` (Fastify, TypeScript strict, ESM). `GET /health` returns JSON with status, version and uptime. Provide a Dockerfile for both apps and a `compose.yaml`; `npm run dev` runs both with hot reload and Vite proxies `/api`. Extend ESLint, Prettier, Husky and CI from Playground 2 to both workspaces.
+
+**Theory question:** Node's event loop: why does one slow synchronous operation delay every request? What is a health endpoint for, and who calls it?
+
+**Answer:**
+
+**The event loop:** Node runs all JavaScript of a process on a single thread. I/O (sockets, files, timers) is handed to the operating system or libuv's thread pool, and when it completes, a callback is put into a queue. The event loop takes one callback at a time from those queues and runs it to completion; only when the call stack is empty can it pick the next one. Nothing preempts running JavaScript.
+
+**Why one slow synchronous operation delays everyone:** While a handler does synchronous work (a CPU-heavy loop, `JSON.parse` of a huge body, `crypto.pbkdf2Sync`, `fs.readFileSync`, a catastrophic regex), the thread is busy and the loop cannot run any other callback. Incoming connections are accepted by the OS but their handlers, other requests' `await` continuations, and timers all wait. One request taking 2 s of CPU time adds up to 2 s to *every* concurrent request, including `/health`. Async I/O is fine because the waiting happens outside the thread; CPU work has to be kept short, split into chunks, or moved to a `worker_thread` or another service. In `apps/api/src/routes/health.ts` the `readFileSync` of `package.json` therefore runs once at startup, never per request.
+
+**What a health endpoint is for:** It lets something outside the process ask "are you alive and able to serve?" without knowing the domain API. `GET /health` is cheap, has no side effects, is not cached (`cache-control: no-store`), and reports `status`, the running `version` (which build is deployed?) and `uptime` (a small value means the process was restarted recently). It deliberately does not call Wikipedia: if an upstream outage made the API "unhealthy", an orchestrator would restart a perfectly working process.
+
+**Who calls it:** machines, not users. Here Docker does: the `healthcheck` in `compose.yaml` calls it every 10 s, and `web` only starts once `api` is `healthy`; the CI smoke test calls it after `docker compose up --wait`. In production, Kubernetes liveness/readiness probes, load balancers (they stop routing to failing instances) and uptime monitors call it. This ties back to the event loop: if the loop is blocked, `/health` times out too, and the container is reported unhealthy.
 
 ---
 

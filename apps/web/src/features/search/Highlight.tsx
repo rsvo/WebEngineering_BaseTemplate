@@ -1,5 +1,5 @@
 import { Fragment, type ReactElement } from 'react';
-import { splitByQuery } from './highlight';
+import { splitByQuery } from './splitByQuery';
 
 interface HighlightProps {
   text: string;
