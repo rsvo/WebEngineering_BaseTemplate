@@ -12,6 +12,8 @@ import {
 import type { Config } from './config.js';
 import { commentRoutes } from './comments/routes.js';
 import { CommentStore } from './comments/store.js';
+import { genReqId, registerProblemDetails } from './problems.js';
+import { debugRoutes } from './routes/debug.js';
 import { healthRoutes } from './routes/health.js';
 
 export interface AppDependencies {
@@ -26,6 +28,9 @@ export function buildApp(
   dependencies: AppDependencies = {}
 ): FastifyInstance {
   const app = Fastify({
+    genReqId,
+    // Every log line of a request carries its id under this key.
+    requestIdLogLabel: 'requestId',
     logger: {
       level: config.logLevel,
       ...(config.prettyLogs
@@ -43,6 +48,9 @@ export function buildApp(
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
+  // One error format for everything, including 404s for unknown routes.
+  registerProblemDetails(app);
+
   const wikipedia =
     dependencies.wikipedia ?? createWikipediaClient(config.wikipedia);
   const bears = createBearService(wikipedia, app.log, config.bearsCacheTtlMs);
@@ -51,6 +59,9 @@ export function buildApp(
   void app.register(healthRoutes);
   void app.register(bearRoutes, { prefix: '/api', bears });
   void app.register(commentRoutes, { prefix: '/api', bears, comments });
+  if (config.enableDebugRoutes) {
+    void app.register(debugRoutes, { prefix: '/api' });
+  }
 
   return app;
 }

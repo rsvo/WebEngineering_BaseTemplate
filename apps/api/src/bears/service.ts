@@ -1,5 +1,5 @@
 import type { FastifyBaseLogger } from 'fastify';
-import { NotFoundError, UpstreamError } from '../errors.js';
+import { NotFoundError, UpstreamUnavailableError } from '../errors.js';
 import { parseBears } from './parse.js';
 import type { Bear } from './schema.js';
 import type { WikipediaClient } from './wikipedia.js';
@@ -28,7 +28,9 @@ export function createBearService(
     if (parsed.length === 0) {
       // "No bears" can only mean that the page changed or we failed to read
       // it, so it is reported as a failure and never as an empty list.
-      throw new UpstreamError('Wikipedia returned no parsable bears.', 502);
+      throw new UpstreamUnavailableError(
+        'Wikipedia returned no parsable bears.'
+      );
     }
 
     // Images are optional: if they cannot be resolved, the bears are still

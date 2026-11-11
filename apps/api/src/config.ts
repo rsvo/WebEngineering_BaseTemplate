@@ -11,6 +11,7 @@ export interface Config {
   port: number;
   logLevel: string;
   prettyLogs: boolean;
+  enableDebugRoutes: boolean;
   wikipedia: WikipediaConfig;
   bearsCacheTtlMs: number;
 }
@@ -46,6 +47,18 @@ function readInteger(
   return value;
 }
 
+function readBoolean(
+  name: string,
+  raw: string | undefined,
+  fallback: boolean
+): boolean {
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const value = raw.trim().toLowerCase();
+  if (value === 'true' || value === '1') return true;
+  if (value === 'false' || value === '0') return false;
+  throw new Error(`${name} must be true or false: "${raw}"`);
+}
+
 function readUrl(
   name: string,
   raw: string | undefined,
@@ -66,6 +79,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: readInteger('PORT', env.PORT, 3000, { min: 1, max: 65535 }),
     logLevel: readString(env.LOG_LEVEL, 'info'),
     prettyLogs: env.NODE_ENV !== 'production',
+    enableDebugRoutes: readBoolean(
+      'ENABLE_DEBUG_ROUTES',
+      env.ENABLE_DEBUG_ROUTES,
+      env.NODE_ENV !== 'production'
+    ),
     wikipedia: {
       apiUrl: readUrl(
         'WIKIPEDIA_API_URL',

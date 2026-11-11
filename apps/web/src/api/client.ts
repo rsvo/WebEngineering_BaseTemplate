@@ -1,17 +1,49 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 
 // All requests go to the same origin; in dev Vite proxies /api, in Docker nginx.
 export const API_BASE_URL = '/api';
 
-// An HTTP error response from our API, with the status code and the message
-// the API sent.
+const REQUEST_ID_HEADER = 'x-request-id';
+
+const FieldErrorSchema = z.object({
+  location: z.string(),
+  pointer: z.string(),
+  detail: z.string(),
+});
+
+export type FieldError = z.infer<typeof FieldErrorSchema>;
+
+// RFC 9457 Problem Details as sent by our API. Every member is optional in the
+// RFC, so the schema is lenient: whatever is usable is used.
+const ProblemSchema = z.object({
+  type: z.string().optional(),
+  title: z.string().optional(),
+  status: z.number().optional(),
+  detail: z.string().optional(),
+  instance: z.string().optional(),
+  requestId: z.string().optional(),
+  errors: z.array(FieldErrorSchema).optional(),
+});
+
+type Problem = z.infer<typeof ProblemSchema>;
+
+// An HTTP error response from our API. `message` is the problem's `detail`,
+// which is written for humans and safe to show.
 export class ApiError extends Error {
   readonly status: number;
+  readonly title: string | undefined;
+  readonly requestId: string | undefined;
+  readonly errors: readonly FieldError[];
 
-  constructor(status: number, message: string) {
-    super(message);
+  constructor(status: number, problem: Problem, requestId: string | undefined) {
+    super(
+      problem.detail ?? problem.title ?? `The request failed (HTTP ${status}).`
+    );
     this.name = 'ApiError';
     this.status = status;
+    this.title = problem.title;
+    this.requestId = problem.requestId ?? requestId;
+    this.errors = problem.errors ?? [];
   }
 }
 
@@ -21,28 +53,32 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
-async function readErrorMessage(response: Response): Promise<string> {
-  try {
-    const body: unknown = await response.json();
-    if (
-      typeof body === 'object' &&
-      body !== null &&
-      'message' in body &&
-      typeof body.message === 'string'
-    ) {
-      return body.message;
+async function toApiError(response: Response): Promise<ApiError> {
+  // Also set on responses that are not problems, e.g. when a proxy in front
+  // of the API rewrote the body.
+  const requestId = response.headers.get(REQUEST_ID_HEADER) ?? undefined;
+
+  let problem: Problem = {};
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('json')) {
+    try {
+      const parsed = ProblemSchema.safeParse(await response.json());
+      if (parsed.success) problem = parsed.data;
+    } catch {
+      // Broken JSON: fall back to the generic message.
     }
-  } catch {
-    // Not JSON (e.g. an HTML error page of a proxy); use the generic message.
   }
-  return `The request failed (HTTP ${response.status}).`;
+  // Anything else (e.g. an HTML error page of a proxy) gets the generic message.
+  return new ApiError(response.status, problem, requestId);
 }
 
 async function send(
   path: string,
   { method = 'GET', body, signal }: RequestOptions
 ): Promise<Response> {
-  const headers: Record<string, string> = { accept: 'application/json' };
+  const headers: Record<string, string> = {
+    accept: 'application/json, application/problem+json',
+  };
   if (body !== undefined) headers['content-type'] = 'application/json';
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -52,9 +88,7 @@ async function send(
     signal,
   });
 
-  if (!response.ok) {
-    throw new ApiError(response.status, await readErrorMessage(response));
-  }
+  if (!response.ok) throw await toApiError(response);
   return response;
 }
 

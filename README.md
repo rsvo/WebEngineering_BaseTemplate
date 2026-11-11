@@ -516,7 +516,7 @@ apps/
   api/   Fastify + TypeScript (strict, ESM), compiled with tsc
 ```
 
-Environment variables (all optional): `PORT` (API port, default `3000`), `HOST` (default `0.0.0.0`), `LOG_LEVEL` (default `info`), `API_PROXY_TARGET` (Vite proxy target, default `http://localhost:3000`), `WIKIPEDIA_API_URL` (default `https://en.wikipedia.org/w/api.php`), `UPSTREAM_TIMEOUT_MS` (default `5000`), `BEARS_CACHE_TTL_MS` (default 5 minutes). If ports 3000/8080 are taken on the host, override the published ports with `API_PORT=3300 WEB_PORT=8380 docker compose up --build`.
+Environment variables (all optional): `PORT` (API port, default `3000`), `HOST` (default `0.0.0.0`), `LOG_LEVEL` (default `info`), `API_PROXY_TARGET` (Vite proxy target, default `http://localhost:3000`), `WIKIPEDIA_API_URL` (default `https://en.wikipedia.org/w/api.php`), `UPSTREAM_TIMEOUT_MS` (default `5000`), `BEARS_CACHE_TTL_MS` (default 5 minutes), `ENABLE_DEBUG_ROUTES` (adds `GET /api/debug/error`; default on, off when `NODE_ENV=production`, i.e. in Docker). If ports 3000/8080 are taken on the host, override the published ports with `API_PORT=3300 WEB_PORT=8380 docker compose up --build`.
 
 ### Tasks
 
@@ -542,7 +542,7 @@ Provide `GET /api/bears` and `GET /api/bears/:id`, fetched and parsed server-sid
 
 **Implementation** (`apps/api/src/bears/`):
 
-- `wikipedia.ts` calls the MediaWiki API with a User-Agent naming the app, its version and the repository as contact, and `AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)`. Responses are validated with zod. Unreachable host, non-2xx, invalid JSON, a MediaWiki `error` object or an unexpected shape become `UpstreamError` 502; a timeout becomes 504.
+- `wikipedia.ts` calls the MediaWiki API with a User-Agent naming the app, its version and the repository as contact, and `AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)`. Responses are validated with zod. Unreachable host, non-2xx, invalid JSON, a MediaWiki `error` object or an unexpected shape become a 502 (`UpstreamUnavailableError`); a timeout becomes a 504 (`UpstreamTimeoutError`).
 - `parse.ts` turns the wikitext into bears. The rows only contain abbreviated names (`U. arctos`), so the genus of the enclosing species table is used to rebuild the full binomial (`Ursus arctos`), and the id is its slug (`ursus-arctos`). The Playground 3 id `u-arctos` was ambiguous (`U.` could be any genus) and is no longer used.
 - `service.ts` resolves all images with **one** batched `imageinfo` request (640 px thumbnails instead of the originals) and caches successful results for 5 minutes; concurrent cache misses share one upstream request. Zero parsed bears is a 502, not `[]`. A failed image lookup only degrades to `imageUrl: null` (the frontend shows its placeholder).
 - `routes.ts` declares zod schemas for params and responses: an invalid id is a 400, an unknown id a 404, and responses that would violate the `Bear` contract cannot be sent.
@@ -631,6 +631,101 @@ curl -i -X DELETE localhost:3000/api/comments/<same id>                         
 **Why DELETE must be idempotent:** A request can fail *after* the server processed it, for example when the connection drops before the response arrives. The client then cannot tell whether the delete happened. Because DELETE is idempotent, it may simply send it again: the end state is "the comment is gone" either way. The spec makes this a promise, so browsers, proxies and HTTP libraries are allowed to retry idempotent requests automatically. Idempotency is about the state, not the response: the first `DELETE` answers `204`, the second `404`, and both leave the server in the same state. The frontend treats a `404` on delete as success for that reason.
 
 **What happens when a client retries a POST:** If the first POST was processed but its response was lost, the retry creates a **second, duplicate comment** with a different id. That is why browsers ask "Confirm form resubmission" on reload and never retry a POST automatically, and why `fetch` doesn't either. Mitigations: prevent accidental double submits (our form disables its button while a request is in flight), use POST/redirect/GET for classic forms, or make the creation idempotent with an `Idempotency-Key` header (the server remembers the key and replays the first response instead of creating again) or a client-chosen id with `PUT`.
+
+#### Task 4: One error format for everything
+
+Add typed error classes and one Fastify error handler that renders RFC 9457 `application/problem+json`: 400 with an `errors` array, 404, 502 or 504, and 500 without stack trace or internals. A request id `x-request-id` (generated or taken over) appears in the response, the log line and `instance`. The frontend parses problem responses and shows `detail`.
+
+**Implementation** (`apps/api/src/errors.ts`, `apps/api/src/problems.ts`):
+
+- **Typed errors:** `HttpError` is the base class for every error whose message is written *for the client*. `ValidationError` (400), `NotFoundError` (404), `UpstreamUnavailableError` (502) and `UpstreamTimeoutError` (504) are thrown by the routes and services, and `ClientError` wraps the 4xx errors Fastify raises itself (malformed JSON 400, 413, 415). The real cause (e.g. `ENOTFOUND en.wikipedia.invalid`, Wikipedia's own error text) is attached as `cause`, which is only logged.
+- **One error handler** (`setErrorHandler`) turns *anything* thrown into a problem. It is an allow-list: only `HttpError`s and Fastify's own client errors are shown as they are. Everything else is treated as a bug and becomes a generic 500 whose `detail` is a fixed sentence. The not-found handler throws a `NotFoundError`, so unknown routes use the same format.
+- **Request ids:** `genReqId` takes over an incoming `x-request-id` if it is a UUID and otherwise generates one (`crypto.randomUUID()`). Arbitrary values are not taken over, so clients cannot inject text into the logs. An `onRequest` hook sets the `x-request-id` response header on *every* response, including successful ones. Pino adds `requestId` to every log line of the request, and the problem carries it as `instance: "urn:uuid:<id>"` (RFC 9457 wants a URI there) and as a `requestId` member.
+- **Logging:** 5xx are logged at `error` with the full error (message, stack, cause chain), 4xx at `info` with the problem only, since they are expected and not our fault.
+- **Provoked 500:** `GET /api/debug/error` throws an error whose message contains a fake database password. The response shows none of it; the log does. The route only exists with `ENABLE_DEBUG_ROUTES` (on in development, off in production).
+- **Frontend:** `apps/web/src/api/client.ts` parses problem responses leniently with zod into an `ApiError` (`status`, `title`, `detail` as the message, `requestId`, `errors`). If the body is not a problem (e.g. an HTML 502 page from nginx), it falls back to `The request failed (HTTP <status>).` and the id from the header. `messageFromError` adds `(Reference: <request id>)` to 5xx messages, and the comment form lists the field errors ("Comment must be at most 1000 characters.") and marks the affected input `aria-invalid`.
+
+| Status | `type` | When | Extension members |
+| --- | --- | --- | --- |
+| 400 | [`validation-error`](#problem-type-validation-error) | a zod schema rejected params, query or body | `errors: [{ location, pointer, detail }]` |
+| 400, 413, 415 | `about:blank` | malformed JSON, body too large, wrong content type | - |
+| 404 | `about:blank` | unknown bear, comment or route | - |
+| 500 | `about:blank` | any unexpected error (a bug) | - |
+| 502 | [`upstream-unavailable`](#problem-type-upstream-unavailable) | Wikipedia unreachable or unusable answer | - |
+| 504 | [`upstream-timeout`](#problem-type-upstream-timeout) | Wikipedia did not answer within `UPSTREAM_TIMEOUT_MS` | - |
+
+Every problem additionally has `title`, `status`, `detail`, `instance` and `requestId`. For `about:blank` the `title` is the HTTP status phrase, as RFC 9457 prescribes.
+
+Example:
+
+```http
+HTTP/1.1 400 Bad Request
+x-request-id: 8f802d0d-9083-4119-b7a7-e2f16bac027e
+content-type: application/problem+json; charset=utf-8
+
+{
+  "type": "https://github.com/rsvo/WebEngineering_BaseTemplate/blob/playground-4/README.md#problem-type-validation-error",
+  "title": "Your request is not valid.",
+  "status": 400,
+  "detail": "The request has 2 invalid fields.",
+  "instance": "urn:uuid:8f802d0d-9083-4119-b7a7-e2f16bac027e",
+  "requestId": "8f802d0d-9083-4119-b7a7-e2f16bac027e",
+  "errors": [
+    { "location": "body", "pointer": "/author", "detail": "must not be empty" },
+    { "location": "body", "pointer": "", "detail": "Unrecognized key: \"foo\"" }
+  ]
+}
+```
+
+Try it with Docker (the debug route is off in production, so enable it for the 500):
+
+```sh
+ENABLE_DEBUG_ROUTES=true docker compose up --build -d
+curl -i -X POST localhost:3000/api/bears/ursus-arctos/comments \
+  -H 'content-type: application/json' -d '{"author":"  ","text":"x","foo":1}'   # 400 + errors
+curl -i localhost:3000/api/bears/ursus-nope                                    # 404
+curl -i localhost:3000/api/debug/error \
+  -H 'x-request-id: 11111111-2222-4333-8444-555555555555'                      # 500, id taken over
+docker compose logs api | grep 11111111-2222-4333-8444-555555555555           # the log lines incl. stack
+WIKIPEDIA_API_URL=https://en.wikipedia.invalid/w/api.php docker compose up -d api
+curl -i localhost:3000/api/bears                                               # 502
+UPSTREAM_TIMEOUT_MS=1 docker compose up -d api
+curl -i localhost:3000/api/bears                                               # 504
+```
+
+##### Problem types
+
+The `type` URIs of our own problem types point here. Clients should branch on `type` and `status`, never on `title` or `detail`.
+
+###### Problem type: validation-error
+
+`400`. The request did not match the route's schema. `errors` lists every invalid field: `location` is the part of the request (`body`, `params`, `querystring`, `headers`), `pointer` a JSON pointer (RFC 6901) into it (`""` for the part as a whole, e.g. an unknown key), and `detail` a human-readable reason. Fix the input; retrying unchanged will fail again.
+
+###### Problem type: upstream-unavailable
+
+`502`. Wikipedia could not be reached or answered with something we cannot use. Not caused by the client; retrying later may succeed.
+
+###### Problem type: upstream-timeout
+
+`504`. Wikipedia did not answer within the configured timeout. Not caused by the client; retrying later may succeed.
+
+**Theory question:** Why exactly one error contract? Which information must never leave the server, and how do request ids connect a complaint to a log line?
+
+**Answer:**
+
+**Why exactly one error contract:** Errors are part of the API like successful responses, and clients have to handle them in code. With one contract, the client needs one parser (`toApiError`) that works for every route, for errors the framework raises (malformed JSON, unknown route) and for errors nobody planned for (a 500). Without it, every endpoint invents its own shape (`{ message }`, `{ error: { msg } }`, plain text, an HTML stack page), and every client needs a special case per endpoint; the missing cases show up as "[object Object]" or as an empty error message. A standard (RFC 9457) adds more: `status` and a stable `type` for code to branch on, `detail` written for humans, extension members such as `errors` for form fields, a media type (`application/problem+json`) by which generic tools and libraries recognise errors, and one schema that can be documented in OpenAPI (Task 5). Finally, a single handler is the single place that decides what leaves the server, which makes it possible to guarantee that nothing leaks.
+
+**What must never leave the server:** everything that helps an attacker or exposes internals, and nothing of it helps the user:
+
+- stack traces, source file paths and line numbers;
+- messages of unexpected exceptions, which can contain SQL statements, connection strings, credentials, tokens or other users' data (our debug route's "db://admin:hunter2@..." is the example);
+- framework, library and runtime names and versions, which make known vulnerabilities easy to look up;
+- internal hostnames, IPs, ports, the topology behind the BFF, and the raw errors of upstream services (`ENOTFOUND`, Wikipedia's error codes);
+- configuration, environment variables and secrets.
+
+This API uses an allow-list instead of a deny-list: only messages of `HttpError`s, which were written for the client, are sent. Everything else becomes "An unexpected error occurred" with status 500, so a new kind of bug cannot leak by accident. The details go into the log, attached to the request id.
+
+**How request ids connect a complaint to a log line:** Each request gets a unique, random id at the very start. Pino writes it as `requestId` into *every* log line of that request: "incoming request", the error with its stack and cause, "request completed". The same id is sent to the client in the `x-request-id` header and in the problem's `instance`/`requestId`, and the UI shows it as "Reference: ...". A user who reports "it failed, reference 6965e5b8-..." therefore gives the operator an exact search key: `docker compose logs api | grep 6965e5b8-...` (or a query in a log system) returns exactly this request's lines, including the stack trace the user never saw. Without the id, the operator would have to guess from a timestamp among thousands of requests. Because the id is a random UUID, it reveals nothing (no request count, no internals) and cannot be guessed. Taking over a valid incoming `x-request-id` allows the same id to be followed across several services (a proxy, the BFF, an upstream), which is the idea that distributed tracing (W3C `traceparent`, OpenTelemetry) generalises.
 
 ---
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { WikipediaConfig } from '../config.js';
-import { UpstreamError } from '../errors.js';
+import { UpstreamTimeoutError, UpstreamUnavailableError } from '../errors.js';
 
 const URSIDS_PAGE = 'List_of_ursids';
 const URSIDS_SECTION = '3';
@@ -50,10 +50,9 @@ function isTimeout(err: unknown): boolean {
 export function createWikipediaClient(
   config: WikipediaConfig
 ): WikipediaClient {
-  function timeoutError(cause: unknown): UpstreamError {
-    return new UpstreamError(
+  function timeoutError(cause: unknown): UpstreamTimeoutError {
+    return new UpstreamTimeoutError(
       `Wikipedia did not respond within ${config.timeoutMs} ms.`,
-      504,
       { cause }
     );
   }
@@ -82,15 +81,14 @@ export function createWikipediaClient(
       });
     } catch (err) {
       if (isTimeout(err)) throw timeoutError(err);
-      throw new UpstreamError('Wikipedia could not be reached.', 502, {
+      throw new UpstreamUnavailableError('Wikipedia could not be reached.', {
         cause: err,
       });
     }
 
     if (!response.ok) {
-      throw new UpstreamError(
-        `Wikipedia answered with HTTP ${response.status}.`,
-        502
+      throw new UpstreamUnavailableError(
+        `Wikipedia answered with HTTP ${response.status}.`
       );
     }
 
@@ -100,24 +98,26 @@ export function createWikipediaClient(
     } catch (err) {
       // The timeout also covers reading the body.
       if (isTimeout(err)) throw timeoutError(err);
-      throw new UpstreamError('Wikipedia returned invalid JSON.', 502, {
+      throw new UpstreamUnavailableError('Wikipedia returned invalid JSON.', {
         cause: err,
       });
     }
 
     const apiError = WikipediaErrorSchema.safeParse(body);
     if (apiError.success) {
-      throw new UpstreamError(
-        `Wikipedia reported an error: ${apiError.data.error.info}`,
-        502
-      );
+      // Wikipedia's own message is logged (as the cause) but not shown to
+      // our clients; it describes Wikipedia's internals, not our API.
+      throw new UpstreamUnavailableError('Wikipedia reported an error.', {
+        cause: new Error(
+          `${apiError.data.error.code}: ${apiError.data.error.info}`
+        ),
+      });
     }
 
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
-      throw new UpstreamError(
+      throw new UpstreamUnavailableError(
         'Wikipedia returned an unexpected response shape.',
-        502,
         { cause: parsed.error }
       );
     }

@@ -303,3 +303,12 @@ audio {
 .error-message[hidden] {
   display: none;
 }
+
+.error-message > p,
+.error-message > ul {
+  margin: 0;
+}
+
+.error-message > ul {
+  padding-left: 2rem;
+}

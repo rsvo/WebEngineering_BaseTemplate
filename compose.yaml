@@ -11,6 +11,9 @@ services:
       # upstream and see the 502 error state.
       WIKIPEDIA_API_URL: ${WIKIPEDIA_API_URL:-}
       UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-}
+      # Off in production; ENABLE_DEBUG_ROUTES=true adds GET /api/debug/error
+      # to provoke a 500 and show that it leaks nothing.
+      ENABLE_DEBUG_ROUTES: ${ENABLE_DEBUG_ROUTES:-}
     ports:
       - '${API_PORT:-3000}:3000'
     # Docker itself calls /health and marks the container (un)healthy; `web`
