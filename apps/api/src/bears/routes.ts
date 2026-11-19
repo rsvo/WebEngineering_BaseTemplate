@@ -1,11 +1,29 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { NotFoundError } from '../errors.js';
 import { problemResponses } from '../openapi.js';
-import { BearIdSchema, BearListSchema, BearSchema } from './schema.js';
-import type { BearService } from './service.js';
+import type { BearRepository } from './repository.js';
+import {
+  BearIdSchema,
+  BearListSchema,
+  BearSchema,
+  type Bear,
+} from './schema.js';
 
 interface BearRoutesOptions {
-  bears: BearService;
+  bears: BearRepository;
+}
+
+// Shared with the comment routes: unknown bears are a 404 everywhere.
+export async function getBearOr404(
+  bears: BearRepository,
+  id: string
+): Promise<Bear> {
+  const bear = await bears.findById(id);
+  if (bear === undefined) {
+    throw new NotFoundError(`There is no bear with the id "${id}".`);
+  }
+  return bear;
 }
 
 export const bearRoutes: FastifyPluginAsyncZod<BearRoutesOptions> = async (
@@ -44,6 +62,6 @@ export const bearRoutes: FastifyPluginAsyncZod<BearRoutesOptions> = async (
         },
       },
     },
-    async (request) => await bears.get(request.params.id)
+    async (request) => await getBearOr404(bears, request.params.id)
   );
 };

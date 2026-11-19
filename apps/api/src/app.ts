@@ -6,11 +6,13 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod';
-import { createBearRepository } from './bears/repository.js';
+import { createDrizzleBearRepository } from './bears/drizzle-repository.js';
+import type { BearRepository } from './bears/repository.js';
 import { bearRoutes } from './bears/routes.js';
 import type { Config } from './config.js';
+import { createDrizzleCommentRepository } from './comments/drizzle-repository.js';
+import type { CommentRepository } from './comments/repository.js';
 import { commentRoutes } from './comments/routes.js';
-import { CommentStore } from './comments/store.js';
 import { createPool } from './db/pool.js';
 import { registerOpenApi } from './openapi.js';
 import {
@@ -23,6 +25,9 @@ import { healthRoutes } from './routes/health.js';
 
 export interface AppDependencies {
   db?: pg.Pool;
+  // Default: Drizzle on `db`. The tests pass in-memory implementations.
+  bears?: BearRepository;
+  comments?: CommentRepository;
 }
 
 // Builds the app without listening, so it can also be exercised with
@@ -75,13 +80,24 @@ export function buildApp(
   // zod schemas; registered before the routes so it sees all of them.
   registerOpenApi(app);
 
+  // The pool connects lazily, so with injected repositories it stays unused
+  // (except by /health/ready).
   const db = dependencies.db ?? createPool(config.database, app.log);
   app.addHook('onClose', async () => {
     await db.end();
   });
-  // Bears are read from the database; Wikipedia is only called by the seed.
-  const bears = createBearRepository(drizzle(db));
-  const comments = new CommentStore();
+  // At LOG_LEVEL=debug every SQL statement is logged (without parameters, as
+  // they contain user input), e.g. to count the queries of a request.
+  const orm = drizzle(db, {
+    logger: {
+      logQuery: (query) => {
+        app.log.debug({ query }, 'sql');
+      },
+    },
+  });
+  // Routes only see the interfaces; the implementation is injected here.
+  const bears = dependencies.bears ?? createDrizzleBearRepository(orm);
+  const comments = dependencies.comments ?? createDrizzleCommentRepository(orm);
 
   void app.register(healthRoutes, { db });
   void app.register(bearRoutes, { prefix: '/api', bears });

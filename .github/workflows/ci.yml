@@ -34,6 +34,9 @@ jobs:
       - name: Check formatting
         run: npm run format:check --workspace ${{ matrix.workspace }}
 
+      - name: Test
+        run: npm run test --workspace ${{ matrix.workspace }} --if-present
+
   docker:
     name: docker compose smoke test
     runs-on: ubuntu-latest

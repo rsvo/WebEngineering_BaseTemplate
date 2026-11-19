@@ -886,6 +886,37 @@ docker compose exec db psql -U bears -c '\dt'   # bears, comments
 
 **Natural vs. surrogate key.** A natural key comes from the data itself. That fits when the value is unique, never changes and is short, like the bear's binomial slug. It's already in every URL and in the API, and the seed can upsert on it directly. A surrogate key is a generated id with no meaning, like the comments' uuid. You need one when nothing in the data identifies the row (two identical comments are still two comments), or when the candidate might change, like names or email addresses. Even our slug has that risk: if a species is ever renamed, its id changes. If that happened often, I'd switch to a surrogate key and keep the slug as a unique column.
 
+#### Task 3: Introduce a repository layer
+
+`BearRepository` and `CommentRepository` as TypeScript interfaces, implemented with Drizzle. Route handlers and services depend on the interfaces only; the implementation is injected (Fastify decorators or plugin options). Keep the in-memory implementation from Playground 4 and use it in the tests. Comments are now persisted.
+
+**Implementation:**
+
+- `bears/` and `comments/` each have a `repository.ts` (the interface), a `drizzle-repository.ts`, and an in-memory version (`createInMemoryBearRepository`, and `memory-repository.ts`, which is the Playground 4 `Map` store). The interfaces only return data; turning a missing bear or comment into a 404 is the routes' job.
+- `app.ts` creates the Drizzle repositories and passes them to the routes as plugin options. `buildApp(config, { bears, comments })` accepts other implementations instead. No route file imports Drizzle or `pg`.
+- `npm test` (`node:test` via `tsx`, also run in CI) runs the routes through `app.inject()` against the in-memory repositories: no database, no port. Test files aren't compiled into `dist` (`tsconfig.build.json`).
+- New `GET /api/comments`: the comments of all bears, grouped by bear id, as the N+1 example below. With `LOG_LEVEL=debug` the API logs every SQL statement, so you can count them.
+
+```sh
+curl -i -X POST localhost:3000/api/bears/ursus-arctos/comments \
+  -H 'content-type: application/json' -d '{"author":"Ann","text":"Hi"}'
+docker compose restart api
+curl localhost:3000/api/bears/ursus-arctos/comments   # still there
+npm test                                               # no database needed
+```
+
+**Theory question:** What does the repository hide, and what does it cost? Explain the N+1 problem using "comments for all bears" and show how your repository avoids it.
+
+**Answer:**
+
+**What it hides.** Everything about storage: that there's SQL and Drizzle at all, table and column names (`image_url`), turning the database's `Date` into the API's ISO string, and how ties in the order are broken. The routes just say `findById` or `listByBear`. That's why the tests can swap in a `Map` without changing a line of the routes.
+
+**What it costs.** One more layer, and every new kind of query needs a new method. Worse, it hides the price of a call: `listByBear(id)` looks like a normal function but is a network round trip, and that makes it easy to call in a loop. The in-memory version also doesn't behave exactly like Postgres (no foreign keys, no `varchar` limits), so passing tests don't prove the SQL is right. That still needs a test against a real database.
+
+**N+1.** "Comments for all bears" written the obvious way is one query for the bears, then `listByBear` for each of the N bears: 1 + N queries. With 8 bears that's 9 round trips, which nobody notices locally. With 1,000 bears it's 1,001, each waiting for the network and a free pool connection, so the endpoint gets slower as the data grows. That's why it's so often found only in production.
+
+**How mine avoids it.** `CommentRepository.listByBears(ids)` fetches the comments of all bears in one query (`WHERE bear_id IN (...)`) and groups them in memory, so `GET /api/comments` always runs exactly two queries, however many bears there are. The debug log shows both, and a test checks that the route calls `listByBears` once and never `listByBear`. Putting this method on the interface is how the repository protects against N+1: the cheap way to ask is also the easy way.
+
 ---
 
 ## In-Class Accessibility Workshop

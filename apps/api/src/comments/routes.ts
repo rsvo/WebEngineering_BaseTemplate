@@ -1,20 +1,21 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import type { BearRepository } from '../bears/repository.js';
+import { getBearOr404 } from '../bears/routes.js';
 import { BearIdSchema } from '../bears/schema.js';
-import type { BearService } from '../bears/service.js';
 import { NotFoundError } from '../errors.js';
 import { problemResponses } from '../openapi.js';
+import type { CommentRepository } from './repository.js';
 import {
   CommentIdSchema,
   CommentListSchema,
   CommentSchema,
   CreateCommentSchema,
 } from './schema.js';
-import type { CommentStore } from './store.js';
 
 interface CommentRoutesOptions {
-  bears: BearService;
-  comments: CommentStore;
+  bears: BearRepository;
+  comments: CommentRepository;
 }
 
 const BearParamsSchema = z.object({ id: BearIdSchema });
@@ -24,6 +25,26 @@ const TAGS = ['comments'];
 export const commentRoutes: FastifyPluginAsyncZod<
   CommentRoutesOptions
 > = async (app, { bears, comments }) => {
+  app.get(
+    '/comments',
+    {
+      schema: {
+        tags: TAGS,
+        summary: 'List the comments of all bears',
+        description:
+          'Grouped by bear id, oldest first; every bear has an entry. Two queries in total (bears, then all their comments), no matter how many bears there are.',
+        response: {
+          200: z.record(BearIdSchema, CommentListSchema),
+          ...problemResponses(500),
+        },
+      },
+    },
+    async () => {
+      const ids = (await bears.list()).map((bear) => bear.id);
+      return Object.fromEntries(await comments.listByBears(ids));
+    }
+  );
+
   app.get(
     '/bears/:id/comments',
     {
@@ -41,8 +62,8 @@ export const commentRoutes: FastifyPluginAsyncZod<
     async (request) => {
       // Throws NotFoundError (404) for unknown bears, so "no comments yet"
       // (200 []) and "no such bear" (404) stay distinguishable.
-      const bear = await bears.get(request.params.id);
-      return comments.listByBear(bear.id);
+      const bear = await getBearOr404(bears, request.params.id);
+      return await comments.listByBear(bear.id);
     }
   );
 
@@ -63,8 +84,8 @@ export const commentRoutes: FastifyPluginAsyncZod<
       },
     },
     async (request, reply) => {
-      const bear = await bears.get(request.params.id);
-      const comment = comments.create(bear.id, request.body);
+      const bear = await getBearOr404(bears, request.params.id);
+      const comment = await comments.create(bear.id, request.body);
       // 201 + Location: a new resource was created, and this is its URL.
       return await reply
         .code(201)
@@ -87,7 +108,7 @@ export const commentRoutes: FastifyPluginAsyncZod<
       },
     },
     async (request) => {
-      const comment = comments.get(request.params.commentId);
+      const comment = await comments.findById(request.params.commentId);
       if (comment === undefined) {
         throw new NotFoundError(
           `There is no comment with the id "${request.params.commentId}".`
@@ -113,7 +134,7 @@ export const commentRoutes: FastifyPluginAsyncZod<
       },
     },
     async (request, reply) => {
-      if (!comments.delete(request.params.commentId)) {
+      if (!(await comments.delete(request.params.commentId))) {
         // Repeating a DELETE still leaves the server in the same state (the
         // comment is gone); only the response tells the client it already was.
         throw new NotFoundError(
