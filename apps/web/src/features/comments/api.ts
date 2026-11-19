@@ -2,9 +2,11 @@ import { requestJson, requestNoContent } from '../../api/client';
 import {
   CommentPageSchema,
   CommentSchema,
+  ReportResultSchema,
   type CommentEntry,
   type CommentPage,
   type NewComment,
+  type ReportResult,
 } from './types';
 
 const PAGE_SIZE = 10;
@@ -42,4 +44,12 @@ export async function deleteComment(commentId: string): Promise<void> {
   await requestNoContent(`/comments/${encodeURIComponent(commentId)}`, {
     method: 'DELETE',
   });
+}
+
+export async function reportComment(commentId: string): Promise<ReportResult> {
+  return await requestJson(
+    `/comments/${encodeURIComponent(commentId)}/report`,
+    ReportResultSchema,
+    { method: 'POST' }
+  );
 }

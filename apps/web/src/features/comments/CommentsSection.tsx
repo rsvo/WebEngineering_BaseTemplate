@@ -14,8 +14,16 @@ export function CommentsSection({
   query,
 }: CommentsSectionProps): ReactElement {
   const [isOpen, setIsOpen] = useState(false);
-  const { state, reload, loadMore, isLoadingMore, loadMoreError, add, remove } =
-    useComments(bearId);
+  const {
+    state,
+    reload,
+    loadMore,
+    isLoadingMore,
+    loadMoreError,
+    add,
+    remove,
+    report,
+  } = useComments(bearId);
 
   return (
     <section className="comments">
@@ -54,6 +62,7 @@ export function CommentsSection({
               comments={state.comments}
               query={query}
               onDelete={remove}
+              onReport={report}
             />
             {loadMoreError !== null && (
               <p className="error-message" role="alert">

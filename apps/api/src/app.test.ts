@@ -5,7 +5,10 @@ import { buildApp } from './app.js';
 import { createInMemoryBearRepository } from './bears/repository.js';
 import type { Bear } from './bears/schema.js';
 import { loadConfig } from './config.js';
-import { createInMemoryCommentRepository } from './comments/memory-repository.js';
+import {
+  createInMemoryCommentRepository,
+  createInMemoryTransactor,
+} from './comments/memory-repository.js';
 import type { CommentRepository } from './comments/repository.js';
 
 // Runs against the in-memory repositories: no database, no network. The URL
@@ -45,10 +48,46 @@ describe('bears and comments API', () => {
     app = buildApp(config, {
       bears: createInMemoryBearRepository(BEARS),
       comments,
+      transaction: createInMemoryTransactor(comments),
     });
   });
   afterEach(async () => {
     await app.close();
+  });
+
+  it('counts 50 concurrent reports exactly and hides at 3', async () => {
+    const { id } = await comments.create('ursus-arctos', {
+      author: 'Ann',
+      text: 'Spam',
+    });
+    const url = `/api/comments/${id}/report`;
+
+    const responses = await Promise.all(
+      Array.from({ length: 50 }, async () => {
+        return await app.inject({ method: 'POST', url });
+      })
+    );
+    // Every request saw a different count: none of them got lost.
+    const counts = responses.map(
+      (response) => response.json<{ reportCount: number }>().reportCount
+    );
+    assert.deepEqual(
+      counts.sort((a, b) => a - b),
+      Array.from({ length: 50 }, (_, i) => i + 1)
+    );
+    const state = await comments.findReportState(id, { lock: false });
+    assert.equal(state?.reportCount, 50);
+
+    // Hidden: no longer readable or listed, but still reportable.
+    assert.equal((await app.inject(`/api/comments/${id}`)).statusCode, 404);
+    const list = await app.inject('/api/bears/ursus-arctos/comments');
+    assert.deepEqual(list.json<{ items: unknown[] }>().items, []);
+
+    const unknown = await app.inject({
+      method: 'POST',
+      url: '/api/comments/00000000-0000-4000-8000-000000000000/report',
+    });
+    assert.equal(unknown.statusCode, 404);
   });
 
   it('lists bears and 404s unknown ones', async () => {

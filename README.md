@@ -982,6 +982,53 @@ That's about 250 times faster, and the cost no longer depends on the table size 
 
 **Small tables.** The planner picks whichever plan it estimates to be cheapest, not "the index if there is one". Our 40 comments fit into one 8 kB page. Reading that page and sorting 5 rows is cheaper than reading index pages and then jumping to the table for each row. An index only pays off when a query needs a small part of a large table. That's also why the seed script runs `ANALYZE`: with outdated statistics, the planner still thinks the table is tiny.
 
+#### Task 5: Transactions and the lost update
+
+`POST /api/comments/:id/report` increments `report_count`; at three reports the comment is hidden (`hidden_at`). First the naive version (read, increment in TypeScript, write), with a script that sends 50 concurrent reports. Then the fix: a transaction with `SELECT ... FOR UPDATE`, or an atomic `UPDATE ... SET report_count = report_count + 1 ... RETURNING`. The transaction boundary belongs in the service, not in the repository.
+
+**Implementation:**
+
+- `drizzle/0002_comment_reports.sql` adds `report_count` (default 0) and `hidden_at`. Hidden comments drop out of the lists and `GET /api/comments/:id` (404), but can still be reported and deleted.
+- `POST /api/comments/:id/report` answers `200 {"reportCount": n, "hidden": bool}`, or 404.
+- The UI has a "Report" button next to "Delete". It thanks the user after each report, and after the third one the comment disappears from the list.
+- `comments/service.ts` does the read-modify-write in TypeScript in both modes: `findReportState`, `+ 1`, set `hiddenAt` at 3, `saveReportState`. The modes only differ in whether this runs inside a transaction with a row lock:
+  - `REPORT_MODE=naive`: no transaction, no lock. This is the race, kept for the demo.
+  - Default (`locked`): `transaction(tx => ...)` with `findReportState(id, { lock: true })`, i.e. `SELECT ... FOR UPDATE`.
+- The service gets a `Transactor` injected and decides what belongs together. The repository only knows how to read with or without a lock and how to write. It runs on whatever it was created with: the pool, or the transaction (`createDrizzleTransactor`). For the tests, `createInMemoryTransactor` runs the work units one after another.
+- `npm run race:reports` (`apps/api/src/scripts/report-race.ts`) creates a comment, sends 50 reports at the same time, and reads the final `report_count` from the database.
+
+```sh
+REPORT_MODE=naive docker compose up -d --build   # or: REPORT_MODE=naive npm run dev
+npm run race:reports
+docker compose up -d                              # back to the default (locked)
+npm run race:reports
+```
+
+**Results** (3 runs each, 50 reports):
+
+| Mode | Final `report_count` | Distinct counts in the responses |
+| --- | --- | --- |
+| naive | 18, 12, 10 | 18, 12, 10 |
+| locked (`FOR UPDATE`) | 50, 50, 50 | 50, 50, 50 |
+
+All 50 requests answered 200 in both modes. In naive mode, the API told up to 40 clients "your report was counted" and then overwrote it. In locked mode, every request saw a different count from 1 to 50.
+
+**Theory question:** Explain ACID and the lost-update anomaly. What does PostgreSQL's default isolation level (read committed) guarantee, and what not? Compare pessimistic locking, atomic updates and optimistic concurrency with a version column.
+
+**Answer:**
+
+**ACID.** *Atomicity*: a transaction happens completely or not at all; if anything fails, everything is rolled back. *Consistency*: constraints like `NOT NULL` and foreign keys hold before and after every transaction. *Isolation*: transactions running at the same time don't see each other's unfinished work, to the degree the isolation level promises. *Durability*: once a commit returns, the data survives a crash, because it's already in the write-ahead log.
+
+**Lost update.** Two requests read `report_count = 7`, both compute 8, both write 8. Two reports came in, but the counter only went up by one. Nothing fails, and every single write is valid; the result is just wrong. That's what the naive mode does with 50 requests: only 10 to 18 survive.
+
+**Read committed.** Each statement only sees data that was committed before it started, so you never read someone else's unfinished changes (no dirty reads). If two transactions update the same row, the second one waits for the first to finish and then works on the new version, which is why `SET report_count = report_count + 1` is safe here. What it doesn't guarantee is that two statements in the same transaction see the same data. Another transaction can commit in between, so rows can change (non-repeatable read) or appear (phantoms). And it doesn't protect a value that was read into TypeScript and written back later. The naive code would lose updates even if it ran inside a transaction; only `FOR UPDATE` changes that.
+
+**Pessimistic locking** (`SELECT ... FOR UPDATE`, my fix) locks the row while reading it, so the other requests wait in line. It's simple and correct, and any logic can run in TypeScript between the read and the write (here, the hide rule). The cost is waiting: the lock is held until the commit, so transactions must stay short, with no network calls inside. Locking several rows in different orders can cause deadlocks.
+
+**An atomic update** (`UPDATE comments SET report_count = report_count + 1, hidden_at = ... RETURNING report_count`) lets the database do the read-modify-write in a single statement and a single round trip. For a plain counter, it's the fastest and simplest option, and what I'd use in production. It only works while the logic fits into SQL.
+
+**Optimistic concurrency** takes no lock. It reads the row together with its `version` and writes with `UPDATE ... SET ..., version = version + 1 WHERE id = $1 AND version = $2`. If no row was updated, someone else got there first, and you retry or answer 409. That's great when conflicts are rare, and it even works across requests (a user editing a form for minutes, with `ETag`/`If-Match`). For 50 reports on the same row at the same moment it's a bad fit, because almost every attempt would conflict and retry.
+
 ---
 
 ## In-Class Accessibility Workshop

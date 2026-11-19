@@ -24,6 +24,13 @@ export const CommentPageSchema = z.object({
 
 export type CommentPage = z.infer<typeof CommentPageSchema>;
 
+export const ReportResultSchema = z.object({
+  reportCount: z.number(),
+  hidden: z.boolean(),
+});
+
+export type ReportResult = z.infer<typeof ReportResultSchema>;
+
 export interface NewComment {
   author: string;
   text: string;

@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -34,6 +35,9 @@ export const comments = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true, precision: 3 })
       .notNull()
       .defaultNow(),
+    reportCount: integer('report_count').notNull().default(0),
+    // Set once the comment has enough reports; hidden comments are not listed.
+    hiddenAt: timestamp('hidden_at', { withTimezone: true, precision: 3 }),
   },
   // Matches the comments page query exactly: equality on bear_id, then the
   // sort key (created_at, id), read backwards for newest first. Also serves

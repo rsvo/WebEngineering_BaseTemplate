@@ -11,6 +11,13 @@ export interface CommentPage {
   nextCursor: CommentCursor | null;
 }
 
+export interface ReportState {
+  reportCount: number;
+  hiddenAt: string | null;
+}
+
+// Hidden comments are left out of lists and findById, but can still be
+// reported and deleted.
 export interface CommentRepository {
   // Newest first, `limit` at a time, starting after `cursor`.
   listByBear: (bearId: string, page: CommentPageQuery) => Promise<CommentPage>;
@@ -20,7 +27,25 @@ export interface CommentRepository {
   create: (bearId: string, input: CreateComment) => Promise<Comment>;
   // Returns whether a comment was removed.
   delete: (id: string) => Promise<boolean>;
+  // `lock`: SELECT ... FOR UPDATE, i.e. other transactions that want to lock
+  // the row wait until the current transaction ends. Needs a transaction.
+  findReportState: (
+    id: string,
+    options: { lock: boolean }
+  ) => Promise<ReportState | undefined>;
+  saveReportState: (id: string, state: ReportState) => Promise<void>;
 }
+
+// What may run inside one transaction.
+export interface TransactionalRepositories {
+  comments: CommentRepository;
+}
+
+// Runs `work` in one transaction: commit if it resolves, roll back if it
+// throws. Who calls this decides the transaction boundary.
+export type Transactor = <T>(
+  work: (repositories: TransactionalRepositories) => Promise<T>
+) => Promise<T>;
 
 // Groups comments by bear, keeping their order and every requested id.
 export function groupByBear(

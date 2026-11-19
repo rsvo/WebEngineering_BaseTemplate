@@ -23,6 +23,7 @@
     "db:migrate": "npm run db:migrate -w apps/api",
     "db:seed": "npm run db:seed -w apps/api",
     "db:seed:comments": "npm run db:seed:comments -w apps/api --",
+    "race:reports": "npm run race:reports -w apps/api",
     "prepare": "husky"
   },
   "lint-staged": {

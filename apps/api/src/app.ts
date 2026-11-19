@@ -10,9 +10,13 @@ import { createDrizzleBearRepository } from './bears/drizzle-repository.js';
 import type { BearRepository } from './bears/repository.js';
 import { bearRoutes } from './bears/routes.js';
 import type { Config } from './config.js';
-import { createDrizzleCommentRepository } from './comments/drizzle-repository.js';
-import type { CommentRepository } from './comments/repository.js';
+import {
+  createDrizzleCommentRepository,
+  createDrizzleTransactor,
+} from './comments/drizzle-repository.js';
+import type { CommentRepository, Transactor } from './comments/repository.js';
 import { commentRoutes } from './comments/routes.js';
+import { createCommentService } from './comments/service.js';
 import { createPool } from './db/pool.js';
 import { registerOpenApi } from './openapi.js';
 import {
@@ -28,6 +32,7 @@ export interface AppDependencies {
   // Default: Drizzle on `db`. The tests pass in-memory implementations.
   bears?: BearRepository;
   comments?: CommentRepository;
+  transaction?: Transactor;
 }
 
 // Builds the app without listening, so it can also be exercised with
@@ -98,10 +103,23 @@ export function buildApp(
   // Routes only see the interfaces; the implementation is injected here.
   const bears = dependencies.bears ?? createDrizzleBearRepository(orm);
   const comments = dependencies.comments ?? createDrizzleCommentRepository(orm);
+  const commentService = createCommentService({
+    comments,
+    transaction: dependencies.transaction ?? createDrizzleTransactor(orm),
+    reportMode: config.reportMode,
+  });
+  if (config.reportMode === 'naive') {
+    app.log.warn('REPORT_MODE=naive: concurrent reports can get lost');
+  }
 
   void app.register(healthRoutes, { db });
   void app.register(bearRoutes, { prefix: '/api', bears });
-  void app.register(commentRoutes, { prefix: '/api', bears, comments });
+  void app.register(commentRoutes, {
+    prefix: '/api',
+    bears,
+    comments,
+    commentService,
+  });
   if (config.enableDebugRoutes) {
     void app.register(debugRoutes, { prefix: '/api' });
   }

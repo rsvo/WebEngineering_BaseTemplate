@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ReportMode } from './comments/service.js';
 import { VERSION } from './version.js';
 
 export interface WikipediaConfig {
@@ -21,6 +22,7 @@ export interface Config {
   corsOrigins: readonly string[];
   database: DatabaseConfig;
   wikipedia: WikipediaConfig;
+  reportMode: ReportMode;
 }
 
 // Wikimedia's User-Agent policy asks for a name, a version and a way to
@@ -62,6 +64,8 @@ const EnvSchema = z.object({
   UPSTREAM_TIMEOUT_MS: int(1, 60_000).default(5000),
 
   ENABLE_DEBUG_ROUTES: z.stringbool().optional(),
+  // `naive` brings back the lost-update race of POST /comments/:id/report.
+  REPORT_MODE: z.enum(['naive', 'locked']).default('locked'),
   CORS_ORIGINS: z
     .string()
     .default('')
@@ -104,5 +108,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       timeoutMs: e.UPSTREAM_TIMEOUT_MS,
       userAgent: USER_AGENT,
     },
+    reportMode: e.REPORT_MODE,
   };
 }

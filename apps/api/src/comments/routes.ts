@@ -15,10 +15,12 @@ import {
   CreateCommentSchema,
   encodeCursor,
 } from './schema.js';
+import { HIDE_AT_REPORTS, type CommentService } from './service.js';
 
 interface CommentRoutesOptions {
   bears: BearRepository;
   comments: CommentRepository;
+  commentService: CommentService;
 }
 
 const BearParamsSchema = z.object({ id: BearIdSchema });
@@ -27,7 +29,7 @@ const TAGS = ['comments'];
 
 export const commentRoutes: FastifyPluginAsyncZod<
   CommentRoutesOptions
-> = async (app, { bears, comments }) => {
+> = async (app, { bears, comments, commentService }) => {
   app.get(
     '/comments',
     {
@@ -152,6 +154,36 @@ export const commentRoutes: FastifyPluginAsyncZod<
         );
       }
       return await reply.code(204).send();
+    }
+  );
+
+  app.post(
+    '/comments/:commentId/report',
+    {
+      schema: {
+        tags: TAGS,
+        summary: 'Report a comment',
+        description: `Adds one report. At ${HIDE_AT_REPORTS} reports the comment is hidden: no longer listed and 404 on GET, but it can still be reported and deleted. Not idempotent: every request counts.`,
+        params: CommentParamsSchema,
+        response: {
+          200: z
+            .object({
+              reportCount: z.number().int().min(1),
+              hidden: z.boolean(),
+            })
+            .meta({ id: 'ReportResult' }),
+          ...problemResponses(400, 404, 500),
+        },
+      },
+    },
+    async (request) => {
+      const result = await commentService.report(request.params.commentId);
+      if (result === undefined) {
+        throw new NotFoundError(
+          `There is no comment with the id "${request.params.commentId}".`
+        );
+      }
+      return result;
     }
   );
 };

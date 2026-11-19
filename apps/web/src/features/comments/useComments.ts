@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { messageFromError } from '../../utils/errors';
-import { createComment, deleteComment, fetchComments } from './api';
-import type { CommentEntry, NewComment } from './types';
+import {
+  createComment,
+  deleteComment,
+  fetchComments,
+  reportComment,
+} from './api';
+import type { CommentEntry, NewComment, ReportResult } from './types';
 
 export type CommentsState =
   | { status: 'loading' }
@@ -25,6 +30,7 @@ interface UseComments {
   // Both reject with the API's message, so the caller can show it.
   add: (comment: NewComment) => Promise<void>;
   remove: (commentId: string) => Promise<void>;
+  report: (commentId: string) => Promise<ReportResult>;
 }
 
 export function useComments(bearId: string): UseComments {
@@ -117,6 +123,15 @@ export function useComments(bearId: string): UseComments {
     update((comments) => comments.filter((c) => c.id !== commentId));
   }
 
+  // Enough reports hide the comment on the server, so it leaves the list.
+  async function report(commentId: string): Promise<ReportResult> {
+    const result = await reportComment(commentId);
+    if (result.hidden) {
+      update((comments) => comments.filter((c) => c.id !== commentId));
+    }
+    return result;
+  }
+
   return {
     state,
     reload: () => {
@@ -135,5 +150,6 @@ export function useComments(bearId: string): UseComments {
     loadMoreError,
     add,
     remove,
+    report,
   };
 }

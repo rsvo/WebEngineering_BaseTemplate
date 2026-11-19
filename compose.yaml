@@ -55,6 +55,9 @@ services:
       # CORS_ORIGINS=http://localhost:4173. Empty: none; the web app below
       # reaches the API through nginx on its own origin and needs no CORS.
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # REPORT_MODE=naive brings back the lost-update race of
+      # POST /api/comments/:id/report (see `npm run race:reports`).
+      REPORT_MODE: ${REPORT_MODE:-}
     ports:
       - '${API_PORT:-3000}:3000'
     depends_on:
