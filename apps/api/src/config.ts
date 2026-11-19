@@ -21,7 +21,6 @@ export interface Config {
   corsOrigins: readonly string[];
   database: DatabaseConfig;
   wikipedia: WikipediaConfig;
-  bearsCacheTtlMs: number;
 }
 
 // Wikimedia's User-Agent policy asks for a name, a version and a way to
@@ -61,7 +60,7 @@ const EnvSchema = z.object({
   DATABASE_POOL_MAX: int(1, 100).default(10),
   WIKIPEDIA_API_URL: z.url().default('https://en.wikipedia.org/w/api.php'),
   UPSTREAM_TIMEOUT_MS: int(1, 60_000).default(5000),
-  BEARS_CACHE_TTL_MS: int(0, 24 * 60 * 60 * 1000).default(5 * 60 * 1000),
+
   ENABLE_DEBUG_ROUTES: z.stringbool().optional(),
   CORS_ORIGINS: z
     .string()
@@ -105,6 +104,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       timeoutMs: e.UPSTREAM_TIMEOUT_MS,
       userAgent: USER_AGENT,
     },
-    bearsCacheTtlMs: e.BEARS_CACHE_TTL_MS,
   };
 }

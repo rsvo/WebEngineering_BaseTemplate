@@ -34,8 +34,7 @@ export const commentRoutes: FastifyPluginAsyncZod<
         params: BearParamsSchema,
         response: {
           200: CommentListSchema,
-          // Checking that the bear exists needs the bear list from Wikipedia.
-          ...problemResponses(400, 404, 500, 502, 504),
+          ...problemResponses(400, 404, 500),
         },
       },
     },
@@ -59,7 +58,7 @@ export const commentRoutes: FastifyPluginAsyncZod<
         body: CreateCommentSchema,
         response: {
           201: CommentSchema,
-          ...problemResponses(400, 404, 500, 502, 504),
+          ...problemResponses(400, 404, 500),
         },
       },
     },

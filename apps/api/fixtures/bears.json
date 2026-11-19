@@ -1,0 +1,61 @@
+{
+  "fetchedAt": "2026-11-19T19:28:11.761Z",
+  "bears": [
+    {
+      "id": "ailuropoda-melanoleuca",
+      "name": "Giant panda",
+      "binomial": "Ailuropoda melanoleuca",
+      "range": "Central China, usually in bamboo forests",
+      "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0f/Grosser_Panda.JPG/960px-Grosser_Panda.JPG?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+    },
+    {
+      "id": "tremarctos-ornatus",
+      "name": "Spectacled bear",
+      "binomial": "Tremarctos ornatus",
+      "range": "Andes mountains in South America",
+      "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/Spectacled_Bear_-_Houston_Zoo.jpg/960px-Spectacled_Bear_-_Houston_Zoo.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+    },
+    {
+      "id": "helarctos-malayanus",
+      "name": "Sun bear",
+      "binomial": "Helarctos malayanus",
+      "range": "Southeast Asia (current range in brown, former in black)",
+      "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a6/Sitting_sun_bear.jpg/960px-Sitting_sun_bear.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+    },
+    {
+      "id": "melursus-ursinus",
+      "name": "Sloth bear",
+      "binomial": "Melursus ursinus",
+      "range": "India (current range in green, former in black)",
+      "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6c/Sloth_Bear_Washington_DC.JPG/960px-Sloth_Bear_Washington_DC.JPG?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+    },
+    {
+      "id": "ursus-americanus",
+      "name": "American black bear",
+      "binomial": "Ursus americanus",
+      "range": "North America (current range in red, former in pink)",
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/0/08/01_Schwarzb%C3%A4r.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+    },
+    {
+      "id": "ursus-thibetanus",
+      "name": "Asian black bear",
+      "binomial": "Ursus thibetanus",
+      "range": "South and East Asia (current range in brown, former in black)",
+      "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b7/Ursus_thibetanus_3_%28Wroclaw_zoo%29.JPG/960px-Ursus_thibetanus_3_%28Wroclaw_zoo%29.JPG?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+    },
+    {
+      "id": "ursus-arctos",
+      "name": "Brown bear",
+      "binomial": "Ursus arctos",
+      "range": "Northern North America and Europe, and northern and central Asia",
+      "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/Kamchatka_Brown_Bear_near_Dvuhyurtochnoe_on_2015-07-23.jpg/960px-Kamchatka_Brown_Bear_near_Dvuhyurtochnoe_on_2015-07-23.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+    },
+    {
+      "id": "ursus-maritimus",
+      "name": "Polar bear",
+      "binomial": "Ursus maritimus",
+      "range": "Polar North America and Asia",
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/6/66/Polar_Bear_-_Alaska_%28cropped%29.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+    }
+  ]
+}

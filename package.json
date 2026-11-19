@@ -18,6 +18,9 @@
     "lint:fix": "npm run lint:fix --workspaces",
     "format": "npm run format --workspaces",
     "format:check": "npm run format:check --workspaces",
+    "db:generate": "npm run db:generate -w apps/api",
+    "db:migrate": "npm run db:migrate -w apps/api",
+    "db:seed": "npm run db:seed -w apps/api",
     "prepare": "husky"
   },
   "lint-staged": {

@@ -21,10 +21,10 @@ export const bearRoutes: FastifyPluginAsyncZod<BearRoutesOptions> = async (
         tags: ['bears'],
         summary: 'List all bears',
         description:
-          'Read from Wikipedia\'s "List of ursids" and cached for a few minutes. Never an empty list: if Wikipedia fails, the answer is 502 or 504.',
+          'Read from the database, ordered by binomial name. Filled from Wikipedia by `npm run db:seed`.',
         response: {
           200: BearListSchema,
-          ...problemResponses(500, 502, 504),
+          ...problemResponses(500),
         },
       },
     },
@@ -40,7 +40,7 @@ export const bearRoutes: FastifyPluginAsyncZod<BearRoutesOptions> = async (
         params: z.object({ id: BearIdSchema }),
         response: {
           200: BearSchema,
-          ...problemResponses(400, 404, 500, 502, 504),
+          ...problemResponses(400, 404, 500),
         },
       },
     },

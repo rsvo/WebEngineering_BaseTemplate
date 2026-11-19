@@ -517,7 +517,7 @@ apps/
   api/   Fastify + TypeScript (strict, ESM), compiled with tsc
 ```
 
-Environment variables (all optional): `PORT` (API port, default `3000`), `HOST` (default `0.0.0.0`), `LOG_LEVEL` (default `info`), `API_PROXY_TARGET` (Vite proxy target, default `http://localhost:3000`), `WIKIPEDIA_API_URL` (default `https://en.wikipedia.org/w/api.php`), `UPSTREAM_TIMEOUT_MS` (default `5000`), `BEARS_CACHE_TTL_MS` (default 5 minutes), `ENABLE_DEBUG_ROUTES` (adds `GET /api/debug/error`; default on, off when `NODE_ENV=production`, i.e. in Docker), `CORS_ORIGINS` (comma-separated origins allowed to call the API cross-origin, e.g. `http://localhost:4173`; default none). For the web build: `VITE_API_BASE_URL` (absolute API URL for a build served from another origin; default `/api`). If ports 3000/8080 are taken on the host, override the published ports with `API_PORT=3300 WEB_PORT=8380 docker compose up --build`.
+Environment variables (all optional): `PORT` (API port, default `3000`), `HOST` (default `0.0.0.0`), `LOG_LEVEL` (default `info`), `API_PROXY_TARGET` (Vite proxy target, default `http://localhost:3000`), `WIKIPEDIA_API_URL` (default `https://en.wikipedia.org/w/api.php`), `UPSTREAM_TIMEOUT_MS` (default `5000`), `ENABLE_DEBUG_ROUTES` (adds `GET /api/debug/error`; default on, off when `NODE_ENV=production`, i.e. in Docker), `CORS_ORIGINS` (comma-separated origins allowed to call the API cross-origin, e.g. `http://localhost:4173`; default none). For the web build: `VITE_API_BASE_URL` (absolute API URL for a build served from another origin; default `/api`). If ports 3000/8080 are taken on the host, override the published ports with `API_PORT=3300 WEB_PORT=8380 docker compose up --build`.
 
 ### Tasks
 
@@ -820,7 +820,7 @@ The `type` URIs of our own problem types (Task 4) point here. Clients should bra
 
 ## 5. Persistence with PostgreSQL
 
-`docker compose up --build` now also starts `db` (PostgreSQL 18, volume `db-data`). For `npm run dev`, start only the database with `docker compose up -d db`; the API reads its defaults from `apps/api/.env.example`, and overrides go into `apps/api/.env` (git-ignored). New variables: `DATABASE_URL` (required), `DATABASE_POOL_MAX` (default `10`), and for compose `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` (default `bears`) and `DB_PORT` (default `5432`, bound to `127.0.0.1` only).
+`docker compose up --build` now also starts `db` (PostgreSQL 18, volume `db-data`) and a one-shot `migrate` service that migrates and seeds it before the API starts. For `npm run dev`, start only the database with `docker compose up -d db` and run `npm run db:migrate && npm run db:seed` once; the API reads its defaults from `apps/api/.env.example`, and overrides go into `apps/api/.env` (git-ignored). New variables: `DATABASE_URL` (required), `DATABASE_POOL_MAX` (default `10`), and for compose `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` (default `bears`) and `DB_PORT` (default `5432`, bound to `127.0.0.1` only).
 
 ### Tasks
 
@@ -832,7 +832,7 @@ Add a `db` service (PostgreSQL current major, named volume, healthcheck); the AP
 
 - `compose.yaml`: `postgres:18-alpine` with a `pg_isready` healthcheck and the volume at `/var/lib/postgresql` (the layout since 18). `api` has `depends_on: db: condition: service_healthy`.
 - `config.ts`: one zod schema for all variables. An invalid environment stops startup and lists every problem by name, without printing values (`DATABASE_URL` contains a password).
-- `db.ts`: one `pg.Pool` per process (`max` = `DATABASE_POOL_MAX`, 2 s connect timeout), closed on shutdown. Errors of idle connections are logged instead of crashing the process.
+- `db/pool.ts`: one `pg.Pool` per process (`max` = `DATABASE_POOL_MAX`, 2 s connect timeout), closed on shutdown. Errors of idle connections are logged instead of crashing the process.
 - `/health/ready` runs `SELECT 1` and answers `200 {"status":"ready"}` or a `503` problem. `/health` and Docker's healthcheck stay independent of the database.
 
 ```sh
@@ -854,6 +854,37 @@ curl -i localhost:3000/health/ready   # 200 again, no API restart needed
 **Why a pool.** Opening a new PostgreSQL connection is expensive: a network handshake, authentication, and the server starts a new process for it. That's much slower than the `SELECT` you actually wanted to run. A pool opens a few connections once and keeps reusing them. It also acts as a limit: when all connections are busy, new requests wait their turn instead of flooding the database.
 
 **What limits the size.** The database only accepts so many connections (`max_connections`, 100 by default), and all API instances share that limit, so instances × pool size has to fit with some room left over for admin tools. Each connection also uses memory on the database server. And more isn't faster: a database can only really work on about as many queries at once as it has CPU cores, so a huge pool mostly creates waiting inside the database. That's why around 10 per instance is a common choice.
+
+#### Task 2: Model bears and comments, first migration
+
+Drizzle schema for `bears` (slug PK, name, binomial, image_url, range, fetched_at) and `comments` (uuid PK, `bear_id` FK `ON DELETE CASCADE`, author, text, created_at) plus indexes. Generate the SQL migration with drizzle-kit and commit it; `npm run db:migrate` and `npm run db:seed`. The seed fetches bears through the Playground 4 BFF code (or a committed fixture) and upserts them. `GET /api/bears` reads from the database.
+
+**Implementation:**
+
+- `apps/api/src/db/schema.ts` is the schema; `apps/api/drizzle/0000_init.sql` is the generated, committed migration (`npm run db:generate` after a schema change). Author and text are `varchar` with the same limits as the zod schema.
+- Index: `comments (bear_id, created_at)`. Postgres doesn't index foreign keys on its own, and this one serves both "comments of a bear, oldest first" and the lookup of `ON DELETE CASCADE`. The primary keys already have their own indexes.
+- `db/migrate.ts` applies pending migrations. `db/seed.ts` loads the bears with the Playground 4 Wikipedia service; if Wikipedia isn't reachable it falls back to `apps/api/fixtures/bears.json`, and then upserts on `id`, so it can be run again at any time.
+- `bears/repository.ts` implements the same `BearService` interface from the database, so the routes didn't change. The API no longer calls Wikipedia at all, so the bear and comment routes can't answer 502/504 anymore. Bears are ordered by binomial name, because Wikipedia's page order isn't stored.
+- Compose: `migrate` runs `migrate.js && seed.js` once `db` is healthy; `api` waits for it with `service_completed_successfully`.
+
+```sh
+docker compose down -v                    # empty database
+WIKIPEDIA_API_URL=https://en.wikipedia.invalid/w/api.php docker compose up --build
+# migrate logs "seeding from the fixture"; http://localhost:8080 still shows all bears
+docker compose exec db psql -U bears -c '\dt'   # bears, comments
+```
+
+**Theory question:** Why migrations instead of creating tables from code at startup? What does forward-only mean, and what goes wrong when two branches both create migration 0003? Natural versus surrogate key: when is which appropriate?
+
+**Answer:**
+
+**Why migrations.** `CREATE TABLE IF NOT EXISTS` at startup only works the first time. It can't rename a column or add a `NOT NULL` column to a table that already has rows, and it has no idea which state an existing database is in. A migration is a numbered SQL file that runs exactly once per database, and the database remembers which ones it has already run. That way my laptop, CI and production all go through the same steps, the schema change gets reviewed as SQL in the pull request, and it runs once before the app starts instead of in every instance at the same time.
+
+**Forward-only.** Once a migration has run anywhere else, you never edit or delete it. If it was wrong, you write a new migration that fixes it. Databases that already ran the old version won't run it again, so changing the file would just make them quietly drift apart. Undoing something works the same way: you write a new migration that reverses it.
+
+**Two branches with 0003.** Both branches started from 0002, so both generate a 0003 on top of it. After the merge there are two migrations with the same number, and each one was written assuming it's the only one. Depending on the tool, one of them gets skipped on databases that already ran the other one. Drizzle, for example, only runs migrations that are newer than the last one it applied. Drizzle's snapshot of the schema is wrong too, so the next generated migration will be wrong. The fix is to treat it like a merge conflict: drop your migration, rebase onto main, and regenerate it as 0004.
+
+**Natural vs. surrogate key.** A natural key comes from the data itself. That fits when the value is unique, never changes and is short, like the bear's binomial slug. It's already in every URL and in the API, and the seed can upsert on it directly. A surrogate key is a generated id with no meaning, like the comments' uuid. You need one when nothing in the data identifies the row (two identical comments are still two comments), or when the candidate might change, like names or email addresses. Even our slug has that risk: if a species is ever renamed, its id changes. If that happened often, I'd switch to a surrogate key and keep the slug as a unique column.
 
 ---
 

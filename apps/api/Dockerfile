@@ -21,6 +21,9 @@ COPY apps/web/package.json apps/web/
 RUN npm ci --workspace apps/api --omit=dev --ignore-scripts \
   && npm cache clean --force
 COPY --from=build /app/apps/api/dist apps/api/dist
+# Read at runtime by dist/db/migrate.js and dist/db/seed.js.
+COPY apps/api/drizzle apps/api/drizzle
+COPY apps/api/fixtures apps/api/fixtures
 
 WORKDIR /app/apps/api
 USER node

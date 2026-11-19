@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 import pg from 'pg';
-import type { DatabaseConfig } from './config.js';
+import type { DatabaseConfig } from '../config.js';
 
 // One pool per process: connections are opened lazily, reused across requests
 // and capped at `max`; further queries wait for a free connection.

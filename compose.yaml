@@ -20,6 +20,25 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # One-shot: brings the schema up to date and (re)seeds the bears, then exits.
+  # The API only starts once this has succeeded.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ['sh', '-c', 'node dist/db/migrate.js && node dist/db/seed.js']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-bears}:${POSTGRES_PASSWORD:-bears}@db:5432/${POSTGRES_DB:-bears}
+      # Set e.g. WIKIPEDIA_API_URL=https://en.wikipedia.invalid/w/api.php to
+      # block Wikipedia; the seed then falls back to apps/api/fixtures.
+      WIKIPEDIA_API_URL: ${WIKIPEDIA_API_URL:-}
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
   api:
     build:
       context: .
@@ -29,11 +48,6 @@ services:
       PORT: 3000
       DATABASE_URL: postgres://${POSTGRES_USER:-bears}:${POSTGRES_PASSWORD:-bears}@db:5432/${POSTGRES_DB:-bears}
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
-      # Empty means "use the default"; set e.g.
-      # WIKIPEDIA_API_URL=https://en.wikipedia.invalid/w/api.php to block the
-      # upstream and see the 502 error state.
-      WIKIPEDIA_API_URL: ${WIKIPEDIA_API_URL:-}
-      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-}
       # Off in production; ENABLE_DEBUG_ROUTES=true adds GET /api/debug/error
       # to provoke a 500 and show that it leaks nothing.
       ENABLE_DEBUG_ROUTES: ${ENABLE_DEBUG_ROUTES:-}
@@ -46,6 +60,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     # Docker calls the liveness check /health, which does not depend on the
     # database: a database outage must not get the API restarted. `web` only
     # starts once the API reports healthy.

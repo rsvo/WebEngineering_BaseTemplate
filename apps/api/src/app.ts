@@ -1,20 +1,17 @@
 import fastifyCors from '@fastify/cors';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import {
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod';
+import { createBearRepository } from './bears/repository.js';
 import { bearRoutes } from './bears/routes.js';
-import { createBearService } from './bears/service.js';
-import {
-  createWikipediaClient,
-  type WikipediaClient,
-} from './bears/wikipedia.js';
 import type { Config } from './config.js';
 import { commentRoutes } from './comments/routes.js';
 import { CommentStore } from './comments/store.js';
-import { createPool } from './db.js';
+import { createPool } from './db/pool.js';
 import { registerOpenApi } from './openapi.js';
 import {
   genReqId,
@@ -25,7 +22,6 @@ import { debugRoutes } from './routes/debug.js';
 import { healthRoutes } from './routes/health.js';
 
 export interface AppDependencies {
-  wikipedia?: WikipediaClient;
   db?: pg.Pool;
 }
 
@@ -79,14 +75,13 @@ export function buildApp(
   // zod schemas; registered before the routes so it sees all of them.
   registerOpenApi(app);
 
-  const wikipedia =
-    dependencies.wikipedia ?? createWikipediaClient(config.wikipedia);
-  const bears = createBearService(wikipedia, app.log, config.bearsCacheTtlMs);
-  const comments = new CommentStore();
   const db = dependencies.db ?? createPool(config.database, app.log);
   app.addHook('onClose', async () => {
     await db.end();
   });
+  // Bears are read from the database; Wikipedia is only called by the seed.
+  const bears = createBearRepository(drizzle(db));
+  const comments = new CommentStore();
 
   void app.register(healthRoutes, { db });
   void app.register(bearRoutes, { prefix: '/api', bears });
