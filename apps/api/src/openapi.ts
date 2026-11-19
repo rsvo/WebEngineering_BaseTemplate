@@ -50,6 +50,7 @@ const PROBLEM_DESCRIPTIONS: Record<number, string> = {
   500: 'Internal Server Error: an unexpected error; details are only in the log, under the request id.',
   502: 'Bad Gateway: Wikipedia is unreachable or answered with something unusable (problem type upstream-unavailable).',
   504: 'Gateway Timeout: Wikipedia did not answer in time (problem type upstream-timeout).',
+  503: 'Service Unavailable: the database is not reachable.',
 };
 
 // The zod transform turns every response schema into plain JSON Schema, which

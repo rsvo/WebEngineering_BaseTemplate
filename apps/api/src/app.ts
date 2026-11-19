@@ -1,5 +1,6 @@
 import fastifyCors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
+import type pg from 'pg';
 import {
   serializerCompiler,
   validatorCompiler,
@@ -13,6 +14,7 @@ import {
 import type { Config } from './config.js';
 import { commentRoutes } from './comments/routes.js';
 import { CommentStore } from './comments/store.js';
+import { createPool } from './db.js';
 import { registerOpenApi } from './openapi.js';
 import {
   genReqId,
@@ -24,6 +26,7 @@ import { healthRoutes } from './routes/health.js';
 
 export interface AppDependencies {
   wikipedia?: WikipediaClient;
+  db?: pg.Pool;
 }
 
 // Builds the app without listening, so it can also be exercised with
@@ -80,8 +83,12 @@ export function buildApp(
     dependencies.wikipedia ?? createWikipediaClient(config.wikipedia);
   const bears = createBearService(wikipedia, app.log, config.bearsCacheTtlMs);
   const comments = new CommentStore();
+  const db = dependencies.db ?? createPool(config.database, app.log);
+  app.addHook('onClose', async () => {
+    await db.end();
+  });
 
-  void app.register(healthRoutes);
+  void app.register(healthRoutes, { db });
   void app.register(bearRoutes, { prefix: '/api', bears });
   void app.register(commentRoutes, { prefix: '/api', bears, comments });
   if (config.enableDebugRoutes) {

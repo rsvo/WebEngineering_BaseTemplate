@@ -1,5 +1,7 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import type pg from 'pg';
 import { z } from 'zod';
+import { ServiceUnavailableError } from '../errors.js';
 import { problemResponses } from '../openapi.js';
 import { VERSION } from '../version.js';
 
@@ -13,7 +15,14 @@ const HealthSchema = z
 
 export type HealthResponse = z.infer<typeof HealthSchema>;
 
-export const healthRoutes: FastifyPluginAsyncZod = async (app) => {
+interface HealthRoutesOptions {
+  db: pg.Pool;
+}
+
+export const healthRoutes: FastifyPluginAsyncZod<HealthRoutesOptions> = async (
+  app,
+  { db }
+) => {
   app.get(
     '/health',
     {
@@ -21,7 +30,7 @@ export const healthRoutes: FastifyPluginAsyncZod = async (app) => {
         tags: ['operations'],
         summary: 'Liveness check',
         description:
-          'Cheap and without side effects; does not call Wikipedia. Used by the Docker healthcheck.',
+          'Is the process alive? Cheap, no side effects, checks no dependencies. Used by the Docker healthcheck.',
         response: { 200: HealthSchema, ...problemResponses(500) },
       },
     },
@@ -33,6 +42,33 @@ export const healthRoutes: FastifyPluginAsyncZod = async (app) => {
         version: VERSION,
         uptime: Math.round(process.uptime()),
       };
+    }
+  );
+
+  app.get(
+    '/health/ready',
+    {
+      schema: {
+        tags: ['operations'],
+        summary: 'Readiness check',
+        description:
+          'Can this instance serve requests? 200 only if `SELECT 1` on the database succeeds, otherwise 503. Wikipedia is deliberately not checked.',
+        response: {
+          200: z.object({ status: z.literal('ready') }),
+          ...problemResponses(500, 503),
+        },
+      },
+    },
+    async (_request, reply) => {
+      void reply.header('cache-control', 'no-store');
+      try {
+        await db.query('SELECT 1');
+      } catch (err) {
+        throw new ServiceUnavailableError('The database is not reachable.', {
+          cause: err,
+        });
+      }
+      return { status: 'ready' as const };
     }
   );
 };

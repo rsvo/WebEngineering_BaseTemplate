@@ -119,6 +119,16 @@ export class NotFoundError extends HttpError {
   }
 }
 
+// A dependency this instance needs (the database) is not available.
+export class ServiceUnavailableError extends HttpError {
+  readonly status = 503;
+
+  constructor(detail: string, options?: ErrorOptions) {
+    super(detail, options);
+    this.name = 'ServiceUnavailableError';
+  }
+}
+
 // Wikipedia was unreachable or answered with something unusable.
 export class UpstreamUnavailableError extends TypedHttpError {
   readonly status = 502;

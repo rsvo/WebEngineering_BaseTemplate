@@ -818,6 +818,43 @@ The `type` URIs of our own problem types (Task 4) point here. Clients should bra
 
 `504`. Wikipedia did not answer within the configured timeout. Not caused by the client; retrying later may succeed.
 
+## 5. Persistence with PostgreSQL
+
+`docker compose up --build` now also starts `db` (PostgreSQL 18, volume `db-data`). For `npm run dev`, start only the database with `docker compose up -d db`; the API reads its defaults from `apps/api/.env.example`, and overrides go into `apps/api/.env` (git-ignored). New variables: `DATABASE_URL` (required), `DATABASE_POOL_MAX` (default `10`), and for compose `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` (default `bears`) and `DB_PORT` (default `5432`, bound to `127.0.0.1` only).
+
+### Tasks
+
+#### Task 1: Add PostgreSQL to the stack
+
+Add a `db` service (PostgreSQL current major, named volume, healthcheck); the API starts only when `db` is healthy. Read `DATABASE_URL` from the environment and validate all env vars with zod at startup. Use a connection pool (`pg.Pool`), never a connection per request. `GET /health/ready` returns 200 only if a trivial query succeeds; `/health` stays a pure liveness check.
+
+**Implementation:**
+
+- `compose.yaml`: `postgres:18-alpine` with a `pg_isready` healthcheck and the volume at `/var/lib/postgresql` (the layout since 18). `api` has `depends_on: db: condition: service_healthy`.
+- `config.ts`: one zod schema for all variables. An invalid environment stops startup and lists every problem by name, without printing values (`DATABASE_URL` contains a password).
+- `db.ts`: one `pg.Pool` per process (`max` = `DATABASE_POOL_MAX`, 2 s connect timeout), closed on shutdown. Errors of idle connections are logged instead of crashing the process.
+- `/health/ready` runs `SELECT 1` and answers `200 {"status":"ready"}` or a `503` problem. `/health` and Docker's healthcheck stay independent of the database.
+
+```sh
+curl -i localhost:3000/health/ready   # 200
+docker compose stop db
+curl -i localhost:3000/health/ready   # 503 application/problem+json; /health is still 200
+docker compose start db
+curl -i localhost:3000/health/ready   # 200 again, no API restart needed
+```
+
+**Theory question:** Liveness versus readiness: who uses each, and what goes wrong if the readiness check includes too many dependencies? Why is a pool necessary, and what limits its size?
+
+**Answer:**
+
+**Liveness vs. readiness.** Liveness asks "is the process still alive, or is it stuck?" Docker or Kubernetes checks it, and if it fails, they restart the container. Readiness asks "can you handle requests right now?" Load balancers check it, and if it fails, they simply stop sending traffic to that instance until it recovers. That's why the database check belongs in readiness and not in liveness: if the database goes down, restarting the API won't bring it back. We just want to stop sending traffic until it's back.
+
+**Too many dependencies in readiness.** If readiness also checked Wikipedia, one Wikipedia hiccup would mark *every* instance as not ready at the same time, and the whole app would go offline, even though bears from the cache and comments still worked. Slow dependencies also make the check time out, so instances keep flipping between ready and not ready. So readiness should only check what this instance really can't work without, which here is just the database.
+
+**Why a pool.** Opening a new PostgreSQL connection is expensive: a network handshake, authentication, and the server starts a new process for it. That's much slower than the `SELECT` you actually wanted to run. A pool opens a few connections once and keeps reusing them. It also acts as a limit: when all connections are busy, new requests wait their turn instead of flooding the database.
+
+**What limits the size.** The database only accepts so many connections (`max_connections`, 100 by default), and all API instances share that limit, so instances × pool size has to fit with some room left over for admin tools. Each connection also uses memory on the database server. And more isn't faster: a database can only really work on about as many queries at once as it has CPU cores, so a huge pool mostly creates waiting inside the database. That's why around 10 per instance is a common choice.
+
 ---
 
 ## In-Class Accessibility Workshop

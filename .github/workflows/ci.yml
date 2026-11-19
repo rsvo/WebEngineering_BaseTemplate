@@ -48,6 +48,9 @@ jobs:
       - name: Check the API health endpoint
         run: curl --fail --silent --show-error --include http://localhost:3000/health
 
+      - name: Check the API readiness endpoint (database)
+        run: curl --fail --silent --show-error --include http://localhost:3000/health/ready
+
       - name: Check the web app
         run: curl --fail --silent --show-error --output /dev/null http://localhost:8080/
 
