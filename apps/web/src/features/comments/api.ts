@@ -1,22 +1,31 @@
 import { requestJson, requestNoContent } from '../../api/client';
 import {
-  CommentListSchema,
+  CommentPageSchema,
   CommentSchema,
   type CommentEntry,
+  type CommentPage,
   type NewComment,
 } from './types';
+
+const PAGE_SIZE = 10;
 
 function bearCommentsPath(bearId: string): string {
   return `/bears/${encodeURIComponent(bearId)}/comments`;
 }
 
+// Newest first; `cursor` is the `nextCursor` of the previous page.
 export async function fetchComments(
   bearId: string,
+  cursor: string | null,
   signal: AbortSignal
-): Promise<readonly CommentEntry[]> {
-  return await requestJson(bearCommentsPath(bearId), CommentListSchema, {
-    signal,
-  });
+): Promise<CommentPage> {
+  const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+  if (cursor !== null) params.set('cursor', cursor);
+  return await requestJson(
+    `${bearCommentsPath(bearId)}?${params.toString()}`,
+    CommentPageSchema,
+    { signal }
+  );
 }
 
 export async function createComment(

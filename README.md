@@ -917,6 +917,71 @@ npm test                                               # no database needed
 
 **How mine avoids it.** `CommentRepository.listByBears(ids)` fetches the comments of all bears in one query (`WHERE bear_id IN (...)`) and groups them in memory, so `GET /api/comments` always runs exactly two queries, however many bears there are. The debug log shows both, and a test checks that the route calls `listByBears` once and never `listByBear`. Putting this method on the interface is how the repository protects against N+1: the cheap way to ask is also the easy way.
 
+#### Task 4: Pagination, filtering and one measured index
+
+`GET /api/bears/:id/comments` cursor-paginated (`limit`, a cursor based on `created_at` and `id`, `nextCursor` in the response). `?q=` on `GET /api/bears` filters by name. A script seeds 100,000 comments; `EXPLAIN ANALYZE` of the comments query without and with an index on `(bear_id, created_at, id)`. Both plans and timings go into the README; the index lives in a migration.
+
+**Implementation:**
+
+- `GET /api/bears/:id/comments?limit=20&cursor=...` returns `{ items, nextCursor }`, newest first (`limit` is 1 to 100, default 20). The cursor is the `(createdAt, id)` of the last item, as opaque base64url JSON. The query is `WHERE bear_id = $1 AND (created_at, id) < ($2, $3) ORDER BY created_at DESC, id DESC LIMIT limit + 1`, and the extra row tells whether there's a next page. A broken cursor is a 400.
+- `created_at` is now `timestamp(3)`, milliseconds like a JavaScript `Date`. With Postgres' default microseconds, a cursor built from a `Date` would be slightly off and skip rows.
+- `GET /api/bears?q=bear`: case-insensitive `ILIKE '%bear%'` on the name, with `%` and `_` escaped so they match literally.
+- `drizzle/0001_comments_pagination_index.sql` replaces Task 2's `(bear_id, created_at)` index with `(bear_id, created_at, id)` and changes the column precision.
+- The UI loads 10 comments and shows a "Load older comments" button while `nextCursor` isn't `null`. New comments go to the top, which doesn't affect the cursor.
+- `npm run db:seed:comments` (or `docker compose exec api node dist/db/seed-comments.js`) inserts 100,000 comments in a single `INSERT ... SELECT generate_series`, spread evenly over the 8 bears and one minute apart, and runs `ANALYZE` afterwards. `apps/api/sql/explain-comments.sql` reproduces the measurement: it drops the index inside a transaction, explains the query, rolls back, then explains it again with the index.
+
+```sh
+docker compose exec api node dist/db/seed-comments.js
+docker compose exec -T db psql -U bears < apps/api/sql/explain-comments.sql
+curl 'localhost:3000/api/bears/ursus-arctos/comments?limit=2'   # then ?cursor=<nextCursor>
+curl 'localhost:3000/api/bears?q=polar'
+```
+
+**Measurement:** 100,000 comments, 12,500 of them for `ursus-arctos`, first page (`LIMIT 21`). PostgreSQL 18 in Docker, warm cache.
+
+Without the index, Postgres reads the whole table, throws away 87,500 rows and sorts the remaining 12,500 to find the newest 21:
+
+```
+Limit (actual time=6.808..6.811 rows=21.00 loops=1)
+  Buffers: shared hit=1340
+  ->  Sort (actual time=6.807..6.808 rows=21.00 loops=1)
+        Sort Key: created_at DESC, id DESC
+        Sort Method: top-N heapsort  Memory: 27kB
+        ->  Seq Scan on comments (actual time=0.005..5.816 rows=12500.00 loops=1)
+              Filter: (bear_id = 'ursus-arctos'::text)
+              Rows Removed by Filter: 87500
+Execution Time: 6.845 ms
+```
+
+With the index, it jumps to the newest entry for this bear and reads 21 entries backwards. No sort, no filter:
+
+```
+Limit (actual time=0.011..0.017 rows=21.00 loops=1)
+  Buffers: shared hit=6
+  ->  Index Scan Backward using comments_bear_id_created_at_id_idx on comments (actual time=0.011..0.015 rows=21.00 loops=1)
+        Index Cond: (bear_id = 'ursus-arctos'::text)
+Execution Time: 0.027 ms
+```
+
+| Query (4 runs each) | Without index | With index |
+| --- | --- | --- |
+| First page | 6.8–8.4 ms, 1,340 pages read | 0.03–0.04 ms, 6 pages |
+| Page deep in the list (with cursor) | 6.0–7.2 ms, 1,334 pages | 0.03–0.05 ms, 7 pages |
+
+That's about 250 times faster, and the cost no longer depends on the table size or on how deep the page is. With only 40 comments, Postgres used a `Seq Scan` and sort even though the index existed (0.05 ms, 1 page), which is the last theory question.
+
+**Theory question:** Why does offset pagination get slower and skip or repeat rows, and how does a cursor avoid that? What is a B-tree index, why does the column order in a composite index matter, and why may PostgreSQL ignore an index on a small table?
+
+**Answer:**
+
+**Offset vs. cursor.** `OFFSET 10000 LIMIT 20` doesn't skip anything for free: the database still has to find and count 10,000 rows, only to throw them away. So every page is slower than the one before. It also counts positions, not rows. If someone posts a comment while I'm reading newest first, everything moves down by one and the next page starts with the comment I just saw. If someone deletes one, I miss one. A cursor says "the 20 rows right after *this* one (`created_at`, `id`)", so the index goes straight there, and page 500 costs the same as page 1 (0.03 ms in the table above). Because it's tied to a value instead of a position, inserts and deletes elsewhere don't move it. The `id` is in the cursor because two comments can have the same `created_at`. The downside is that you can't jump to page 37 or show a total count for free.
+
+**B-tree.** A B-tree is a sorted, balanced tree. The leaves hold all keys in order, each pointing to its row, and each leaf is linked to its neighbours. A lookup goes from the root down to a leaf in a few steps (3–4 levels even for millions of rows), and from there it can read along the leaves in either direction. That's why one index serves `=`, ranges and `ORDER BY` without sorting.
+
+**Column order.** A composite index is sorted like a phone book: by the first column, then by the second within equal first values, and so on. `(bear_id, created_at, id)` groups all comments of one bear together, already sorted by time, so "bear X, newest 21" is one jump plus 21 entries. With `(created_at, bear_id)`, the comments of one bear would be spread over the whole index, and Postgres would have to walk through everyone's comments by time and filter. The index only helps for a leading prefix of its columns, so the rule is: equality columns first, then the ones you sort or compare ranges on.
+
+**Small tables.** The planner picks whichever plan it estimates to be cheapest, not "the index if there is one". Our 40 comments fit into one 8 kB page. Reading that page and sorting 5 rows is cheaper than reading index pages and then jumping to the table for each row. An index only pays off when a query needs a small part of a large table. That's also why the seed script runs `ANALYZE`: with outdated statistics, the planner still thinks the table is tiny.
+
 ---
 
 ## In-Class Accessibility Workshop

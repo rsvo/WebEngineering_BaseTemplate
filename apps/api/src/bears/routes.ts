@@ -39,14 +39,21 @@ export const bearRoutes: FastifyPluginAsyncZod<BearRoutesOptions> = async (
         tags: ['bears'],
         summary: 'List all bears',
         description:
-          'Read from the database, ordered by binomial name. Filled from Wikipedia by `npm run db:seed`.',
+          'Read from the database, ordered by binomial name. Filled from Wikipedia by `npm run db:seed`. `q` keeps the bears whose name contains it (case-insensitive); no match is `[]`.',
+        querystring: z.object({
+          q: z.string().trim().max(100).optional().meta({ example: 'bear' }),
+        }),
         response: {
           200: BearListSchema,
-          ...problemResponses(500),
+          ...problemResponses(400, 500),
         },
       },
     },
-    async () => await bears.list()
+    async (request) => {
+      const { q } = request.query;
+      // An empty q (`?q=`) means no filter.
+      return await bears.list(q === '' ? undefined : q);
+    }
   );
 
   app.get(

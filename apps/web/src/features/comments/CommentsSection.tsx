@@ -14,7 +14,8 @@ export function CommentsSection({
   query,
 }: CommentsSectionProps): ReactElement {
   const [isOpen, setIsOpen] = useState(false);
-  const { state, reload, add, remove } = useComments(bearId);
+  const { state, reload, loadMore, isLoadingMore, loadMoreError, add, remove } =
+    useComments(bearId);
 
   return (
     <section className="comments">
@@ -48,11 +49,28 @@ export function CommentsSection({
           </>
         )}
         {state.status === 'success' && (
-          <CommentList
-            comments={state.comments}
-            query={query}
-            onDelete={remove}
-          />
+          <>
+            <CommentList
+              comments={state.comments}
+              query={query}
+              onDelete={remove}
+            />
+            {loadMoreError !== null && (
+              <p className="error-message" role="alert">
+                {loadMoreError}
+              </p>
+            )}
+            {state.nextCursor !== null && (
+              <button
+                type="button"
+                className="load-more"
+                disabled={isLoadingMore}
+                onClick={loadMore}
+              >
+                {isLoadingMore ? 'Loading...' : 'Load older comments'}
+              </button>
+            )}
+          </>
         )}
       </div>
     </section>

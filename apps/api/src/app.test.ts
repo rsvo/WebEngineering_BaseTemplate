@@ -61,6 +61,53 @@ describe('bears and comments API', () => {
     assert.match(missing.headers['content-type'] ?? '', /problem\+json/);
   });
 
+  it('filters bears by name with ?q=', async () => {
+    const polar = await app.inject('/api/bears?q=POLAR');
+    assert.deepEqual(polar.json(), [BEARS[1]]);
+    assert.deepEqual((await app.inject('/api/bears?q=koala')).json(), []);
+    assert.deepEqual((await app.inject('/api/bears?q=')).json(), BEARS);
+  });
+
+  it('pages through comments with a cursor, newest first', async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const comment = await comments.create('ursus-arctos', {
+        author: 'Ann',
+        text: `#${i}`,
+      });
+      ids.push(comment.id);
+    }
+    // Same-millisecond timestamps are fine: id breaks the tie.
+    const all = (await comments.listByBear('ursus-arctos', { limit: 10 }))
+      .items;
+
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const query: string = cursor === null ? '' : `&cursor=${cursor}`;
+      const response = await app.inject(
+        `/api/bears/ursus-arctos/comments?limit=2${query}`
+      );
+      assert.equal(response.statusCode, 200);
+      const page = response.json<{
+        items: Array<{ id: string }>;
+        nextCursor: string | null;
+      }>();
+      assert.ok(page.items.length <= 2);
+      seen.push(...page.items.map((item) => item.id));
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+
+    assert.deepEqual(
+      seen,
+      all.map((comment) => comment.id)
+    );
+    assert.deepEqual([...seen].sort(), [...ids].sort());
+
+    const bad = await app.inject('/api/bears/ursus-arctos/comments?cursor=x');
+    assert.equal(bad.statusCode, 400);
+  });
+
   it('creates, lists and deletes a comment', async () => {
     const created = await app.inject({
       method: 'POST',
@@ -74,7 +121,7 @@ describe('bears and comments API', () => {
 
     const list = await app.inject('/api/bears/ursus-arctos/comments');
     assert.deepEqual(
-      list.json<Array<{ id: string }>>().map((comment) => comment.id),
+      list.json<{ items: Array<{ id: string }> }>().items.map((c) => c.id),
       [id]
     );
 
@@ -105,9 +152,9 @@ describe('bears and comments API', () => {
     await comments.create('ursus-maritimus', { author: 'Ann', text: 'Cold' });
     const calls = { listByBear: 0, listByBears: 0 };
     const { listByBear, listByBears } = comments;
-    comments.listByBear = async (bearId) => {
+    comments.listByBear = async (bearId, page) => {
       calls.listByBear++;
-      return await listByBear(bearId);
+      return await listByBear(bearId, page);
     };
     comments.listByBears = async (bearIds) => {
       calls.listByBears++;

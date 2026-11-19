@@ -43,3 +43,64 @@ export const CommentSchema = z
 export type Comment = z.infer<typeof CommentSchema>;
 
 export const CommentListSchema = z.array(CommentSchema);
+
+// Position after which the next page starts: the sort key of the last comment
+// of the previous page.
+export interface CommentCursor {
+  createdAt: string;
+  id: string;
+}
+
+const CursorPayloadSchema = z.object({
+  createdAt: z.iso.datetime(),
+  id: CommentIdSchema,
+});
+
+// Opaque to clients (base64url JSON), so its format can change later.
+export function encodeCursor(cursor: CommentCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
+const CursorSchema = z
+  .string()
+  .max(200)
+  .transform((value, ctx): CommentCursor => {
+    try {
+      const json: unknown = JSON.parse(
+        Buffer.from(value, 'base64url').toString('utf8')
+      );
+      return CursorPayloadSchema.parse(json);
+    } catch {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'must be a nextCursor returned by this API',
+      });
+      return z.NEVER;
+    }
+  })
+  .meta({ description: 'The `nextCursor` of the previous page.' });
+
+export const DEFAULT_PAGE_SIZE = 20;
+export const MAX_PAGE_SIZE = 100;
+
+export const CommentPageQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_PAGE_SIZE)
+    .default(DEFAULT_PAGE_SIZE),
+  cursor: CursorSchema.optional(),
+});
+
+export type CommentPageQuery = z.infer<typeof CommentPageQuerySchema>;
+
+export const CommentPageSchema = z
+  .object({
+    items: CommentListSchema,
+    nextCursor: z.string().nullable().meta({
+      description:
+        'Pass as `cursor` to get the next page; `null` on the last page.',
+    }),
+  })
+  .meta({ id: 'CommentPage' });

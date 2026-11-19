@@ -17,6 +17,13 @@ export type CommentEntry = z.infer<typeof CommentSchema>;
 
 export const CommentListSchema = z.array(CommentSchema).readonly();
 
+export const CommentPageSchema = z.object({
+  items: CommentListSchema,
+  nextCursor: z.string().nullable(),
+});
+
+export type CommentPage = z.infer<typeof CommentPageSchema>;
+
 export interface NewComment {
   author: string;
   text: string;

@@ -9,8 +9,11 @@ import type { CommentRepository } from './repository.js';
 import {
   CommentIdSchema,
   CommentListSchema,
+  CommentPageQuerySchema,
+  CommentPageSchema,
   CommentSchema,
   CreateCommentSchema,
+  encodeCursor,
 } from './schema.js';
 
 interface CommentRoutesOptions {
@@ -32,7 +35,7 @@ export const commentRoutes: FastifyPluginAsyncZod<
         tags: TAGS,
         summary: 'List the comments of all bears',
         description:
-          'Grouped by bear id, oldest first; every bear has an entry. Two queries in total (bears, then all their comments), no matter how many bears there are.',
+          'Grouped by bear id, newest first; every bear has an entry. Two queries in total (bears, then all their comments), no matter how many bears there are.',
         response: {
           200: z.record(BearIdSchema, CommentListSchema),
           ...problemResponses(500),
@@ -50,20 +53,27 @@ export const commentRoutes: FastifyPluginAsyncZod<
     {
       schema: {
         tags: TAGS,
-        summary: "List a bear's comments",
-        description: 'Oldest first; `[]` if the bear has no comments yet.',
+        summary: "List a bear's comments, one page at a time",
+        description:
+          'Newest first, `limit` per page. For the next page, pass the `nextCursor` of this one as `cursor`; it is `null` on the last page. Comments created or deleted in between never shift a page.',
         params: BearParamsSchema,
+        querystring: CommentPageQuerySchema,
         response: {
-          200: CommentListSchema,
+          200: CommentPageSchema,
           ...problemResponses(400, 404, 500),
         },
       },
     },
     async (request) => {
       // Throws NotFoundError (404) for unknown bears, so "no comments yet"
-      // (200 []) and "no such bear" (404) stay distinguishable.
+      // (200, no items) and "no such bear" (404) stay distinguishable.
       const bear = await getBearOr404(bears, request.params.id);
-      return await comments.listByBear(bear.id);
+      const page = await comments.listByBear(bear.id, request.query);
+      return {
+        items: page.items,
+        nextCursor:
+          page.nextCursor === null ? null : encodeCursor(page.nextCursor),
+      };
     }
   );
 

@@ -1,7 +1,7 @@
-import { asc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { comments } from '../db/schema.js';
-import { groupByBear, type CommentRepository } from './repository.js';
+import { groupByBear, toPage, type CommentRepository } from './repository.js';
 import type { Comment } from './schema.js';
 
 type CommentRow = typeof comments.$inferSelect;
@@ -11,21 +11,31 @@ const toComment = (row: CommentRow): Comment => ({
   createdAt: row.createdAt.toISOString(),
 });
 
-// Ties on created_at (same microsecond) are broken by id, so the order is
-// stable across requests.
-const oldestFirst = [asc(comments.createdAt), asc(comments.id)];
+// Newest first. Ties on created_at (same millisecond) are broken by id, so
+// the order is total and a cursor never skips or repeats a row.
+const newestFirst = [desc(comments.createdAt), desc(comments.id)];
 
 export function createDrizzleCommentRepository(
   db: NodePgDatabase
 ): CommentRepository {
   return {
-    listByBear: async (bearId) => {
+    // Keyset pagination: "rows before the cursor" instead of OFFSET, so the
+    // index on (bear_id, created_at, id) jumps straight to the page.
+    listByBear: async (bearId, { limit, cursor }) => {
       const rows = await db
         .select()
         .from(comments)
-        .where(eq(comments.bearId, bearId))
-        .orderBy(...oldestFirst);
-      return rows.map(toComment);
+        .where(
+          and(
+            eq(comments.bearId, bearId),
+            cursor === undefined
+              ? undefined
+              : sql`(${comments.createdAt}, ${comments.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
+          )
+        )
+        .orderBy(...newestFirst)
+        .limit(limit + 1);
+      return toPage(rows.map(toComment), limit);
     },
 
     // One query with `bear_id IN (...)` instead of one query per bear.
@@ -35,7 +45,7 @@ export function createDrizzleCommentRepository(
         .select()
         .from(comments)
         .where(inArray(comments.bearId, [...bearIds]))
-        .orderBy(...oldestFirst);
+        .orderBy(...newestFirst);
       return groupByBear(bearIds, rows.map(toComment));
     },
 

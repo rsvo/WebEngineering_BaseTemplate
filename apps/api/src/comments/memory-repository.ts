@@ -1,17 +1,29 @@
 import { randomUUID } from 'node:crypto';
-import { groupByBear, type CommentRepository } from './repository.js';
+import { groupByBear, toPage, type CommentRepository } from './repository.js';
 import type { Comment } from './schema.js';
+
+// Newest first by (createdAt, id). ISO timestamps compare correctly as strings.
+const newestFirst = (a: Comment, b: Comment): number => {
+  const byTime = b.createdAt.localeCompare(a.createdAt);
+  return byTime !== 0 ? byTime : b.id.localeCompare(a.id);
+};
 
 // The Playground 4 store: comments live in the memory of this process only.
 // Used by the tests, which then need no database.
 export function createInMemoryCommentRepository(): CommentRepository {
-  // Map preserves insertion order, i.e. the order of creation.
   const comments = new Map<string, Comment>();
-  const all = (): Comment[] => [...comments.values()];
+  const all = (): Comment[] => [...comments.values()].sort(newestFirst);
 
   return {
-    listByBear: async (bearId) =>
-      all().filter((comment) => comment.bearId === bearId),
+    listByBear: async (bearId, { limit, cursor }) => {
+      const rows = all().filter(
+        (comment) =>
+          comment.bearId === bearId &&
+          (cursor === undefined ||
+            newestFirst(comment, { ...comment, ...cursor }) > 0)
+      );
+      return toPage(rows.slice(0, limit + 1), limit);
+    },
 
     listByBears: async (bearIds) => groupByBear(bearIds, all()),
 

@@ -272,7 +272,8 @@ audio {
   height: auto;
 }
 
-.retry {
+.retry,
+.load-more {
   font-size: 1.6rem;
   line-height: 32px;
   padding: 0 1.2rem;
@@ -280,6 +281,10 @@ audio {
   border: 0;
   color: white;
   cursor: pointer;
+}
+
+.load-more {
+  margin-top: 1rem;
 }
 
 .delete-comment {
@@ -295,6 +300,7 @@ audio {
 }
 
 .delete-comment:disabled,
+.load-more:disabled,
 .comment-form input[type="submit"]:disabled {
   opacity: 0.6;
   cursor: wait;

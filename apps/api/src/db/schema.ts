@@ -29,13 +29,20 @@ export const comments = pgTable(
       .references(() => bears.id, { onDelete: 'cascade' }),
     author: varchar('author', { length: AUTHOR_MAX_LENGTH }).notNull(),
     text: varchar('text', { length: TEXT_MAX_LENGTH }).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true })
+    // Milliseconds, like JavaScript's Date: a pagination cursor built from a
+    // Date must compare equal to the stored value (microseconds would not).
+    createdAt: timestamp('created_at', { withTimezone: true, precision: 3 })
       .notNull()
       .defaultNow(),
   },
-  // Postgres does not index foreign keys by itself. This one serves "comments
-  // of a bear, oldest first" and the lookups of ON DELETE CASCADE.
+  // Matches the comments page query exactly: equality on bear_id, then the
+  // sort key (created_at, id), read backwards for newest first. Also serves
+  // ON DELETE CASCADE, which looks comments up by bear_id (the first column).
   (table) => [
-    index('comments_bear_id_created_at_idx').on(table.bearId, table.createdAt),
+    index('comments_bear_id_created_at_id_idx').on(
+      table.bearId,
+      table.createdAt,
+      table.id
+    ),
   ]
 );
