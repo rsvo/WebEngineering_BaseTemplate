@@ -76,6 +76,11 @@ export function buildApp(
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
+  // The API only accepts JSON. HTML forms can only send text/plain,
+  // urlencoded or multipart bodies cross-site without a CORS preflight, so
+  // a forged form POST is rejected with a 415 before any route code runs.
+  app.removeContentTypeParser('text/plain');
+
   // One error format for everything, including 404s for unknown routes.
   registerProblemDetails(app);
 

@@ -894,7 +894,7 @@ docker compose exec db psql -U bears -c '\dt'   # bears, comments
 
 - `bears/` and `comments/` each have a `repository.ts` (the interface), a `drizzle-repository.ts`, and an in-memory version (`createInMemoryBearRepository`, and `memory-repository.ts`, which is the Playground 4 `Map` store). The interfaces only return data; turning a missing bear or comment into a 404 is the routes' job.
 - `app.ts` creates the Drizzle repositories and passes them to the routes as plugin options. `buildApp(config, { bears, comments })` accepts other implementations instead. No route file imports Drizzle or `pg`.
-- `npm test` (`node:test` via `tsx`, also run in CI) runs the routes through `app.inject()` against the in-memory repositories: no database, no port. Test files aren't compiled into `dist` (`tsconfig.build.json`).
+- `npm test` (`node:test` via `tsx` back then, vitest since Playground 6; also run in CI) runs the routes through `app.inject()` against the in-memory repositories: no database, no port. Test files aren't compiled into `dist` (`tsconfig.build.json`).
 - New `GET /api/comments`: the comments of all bears, grouped by bear id, as the N+1 example below. With `LOG_LEVEL=debug` the API logs every SQL statement, so you can count them.
 
 ```sh
@@ -1189,6 +1189,49 @@ Residual risk: port 3000 is published directly for the demos, and Docker forward
 **Fixed window vs. token bucket.** A fixed window counts requests per key and resets the counter when the window ends. That's what `@fastify/rate-limit` does, and it's simple and cheap. The weakness is the boundary: five attempts at the end of one window and five at the start of the next make ten in a few seconds. A token bucket holds up to N tokens and refills them at a steady rate; each request takes one. It allows a short burst up to the bucket size, but over time never more than the refill rate, without the boundary spike. For a login, both are fine, because the argon2 hash already makes every attempt expensive.
 
 **Defence in depth.** No single measure is trusted to hold, so every attack runs into several layers. Password guessing meets the rate limit, the slow argon2 hash and the 12-character minimum. CSRF meets SameSite=Lax, the CORS allow-list and the JSON content type, which forces a preflight. Injection and XSS meet zod, parameterised queries, React's escaping and the CSP. If one layer has a bug or a misconfiguration, the next one still stops the attack.
+
+#### Task 5: Security review and one attack test
+
+A review of three OWASP Top 10 risks for this app, and one automated test that reproduces an attack and shows the mitigation holds.
+
+**Implementation:**
+
+- The API tests now run on vitest (`npm test`, also in CI). The switch only changed the import lines; `describe`/`it`/hooks are the same API.
+- `apps/api/src/security.test.ts` attacks with a **cross-site POST (CSRF)** via `fastify.inject()`. It assumes SameSite has already failed and sends the victim's session cookie together with `Origin: https://evil.example`:
+  - The two bodies an HTML form can send without a preflight, `text/plain` (the trick of a form whose input name looks like JSON) and `application/x-www-form-urlencoded`, get a 415, and no comment is created. To make this hold, `app.ts` removes Fastify's default `text/plain` parser, because the API only accepts JSON.
+  - A JSON `fetch` from that origin needs a preflight, which gets no `Access-Control-Allow-Origin`, so the browser never sends the POST. The allowed origin gets it, with credentials.
+- `apps/web/nginx.conf` adds a CSP for the web app (`script-src 'self'`, `connect-src 'self'`, images only from Wikimedia, ...) as the second layer against stored XSS.
+
+```sh
+npm test -w apps/api      # security.test.ts: attack: cross-site POST (CSRF), 2 tests
+curl -s -o /dev/null -w "%{http_code}\n" localhost:8080/api/bears/ursus-arctos/comments \
+  -H 'content-type: text/plain' -d '{"author":"M","text":"x"}'      # 415
+```
+
+**Security review:**
+
+**A01 Broken Access Control.**
+- *How it applies:* comments belong to users, and the delete route takes an id from the URL, which is the classic IDOR. CSRF belongs here too, since it makes the victim's browser use their own access.
+- *Mitigation:* every delete goes through `canDeleteComment` on the server (Task 3), and `author_id` comes only from the session. Against CSRF there are SameSite=Lax, the CORS allow-list and JSON-only bodies, all covered by the attack test above.
+- *Residual risk:* every new route has to remember its policy check, and no framework enforces that. Reporting comments is anonymous on purpose, so anyone can push a comment towards hidden. The rate limit doesn't cover reports.
+
+**A05 Injection (SQL and stored XSS).**
+- *How it applies:* `?q=` goes into a `LIKE` query, and comment text from one user is shown to all others.
+- *Mitigation:* Drizzle sends values as bind parameters, never as SQL text, and `%`/`_` in `q` are escaped. zod limits types and lengths. React escapes text when it renders, the app never uses `dangerouslySetInnerHTML`, and the CSP only runs our own scripts.
+- *Residual risk:* the hand-written SQL in the scripts and migrations has to stay parameterised. A future feature that renders HTML (Markdown comments, say) would need a sanitiser. `'unsafe-inline'` styles still allow CSS injection.
+
+**A07 Authentication Failures.**
+- *How it applies:* the login is open to password guessing and credential stuffing, and a stolen session is as good as the password.
+- *Mitigation:* argon2id with a per-password salt, 12+ character passwords, a rate limit of 5 attempts per IP and minute, the same timing for unknown e-mails, and HttpOnly/Secure/SameSite cookies that logout really invalidates.
+- *Residual risk:* the limit is per IP, so a botnet spreads its guesses, and port 3000 lets clients spoof `X-Forwarded-For` (see Task 4). There's no MFA, no breached-password check and no account lockout, and register still reveals whether an e-mail exists (409, Task 1).
+
+**Theory question:** Why do parameterised queries stop SQL injection while input validation alone does not? Where is stored XSS mitigated (output encoding in React, Content Security Policy) and what is the server's share of the responsibility?
+
+**Answer:**
+
+**Parameterised queries.** Injection happens when data is glued into the SQL text, so the database parses part of the input as code. A bind parameter is sent separately from the query, after the query is parsed, so `' OR 1=1--` is only ever a string to compare against, whatever it contains. Validation can't give that guarantee: lots of valid input contains quotes (O'Brien, a comment saying "don't"), a blocklist always misses some encoding, and a validator is easy to forget on one route. Validation is useful for keeping garbage out, but it isn't what protects the query.
+
+**Stored XSS.** The dangerous moment is output, not input, because the payload only becomes code when a browser parses it as HTML. So the main mitigation is in the client: React renders `{comment.text}` as a text node and escapes `<script>`. The CSP is the second layer: even if markup got in through a bug, the browser only runs scripts from our origin. The server's share is to store data as it is and not try to "clean" it (it can't know the output context). It should only ever send it as JSON with `nosniff`, so it is never rendered as a page; it delivers the CSP header; and it limits the length. Sanitising HTML on the server would only become necessary if we ever rendered user HTML.
 
 ---
 
