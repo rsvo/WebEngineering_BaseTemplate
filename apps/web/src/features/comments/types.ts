@@ -8,6 +8,7 @@ export const TEXT_MAX_LENGTH = 1000;
 export const CommentSchema = z.object({
   id: z.string().min(1),
   bearId: z.string().min(1),
+  authorId: z.string().nullable(),
   author: z.string(),
   text: z.string(),
   createdAt: z.string(),

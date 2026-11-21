@@ -2,7 +2,7 @@ import type {
   Comment,
   CommentCursor,
   CommentPageQuery,
-  CreateComment,
+  NewComment,
 } from './schema.js';
 
 export interface CommentPage {
@@ -23,8 +23,12 @@ export interface CommentRepository {
   listByBear: (bearId: string, page: CommentPageQuery) => Promise<CommentPage>;
   // One round trip for many bears (avoids N+1); every id gets an entry.
   listByBears: (bearIds: readonly string[]) => Promise<Map<string, Comment[]>>;
-  findById: (id: string) => Promise<Comment | undefined>;
-  create: (bearId: string, input: CreateComment) => Promise<Comment>;
+  // `includeHidden`: e.g. to check who may delete a hidden comment.
+  findById: (
+    id: string,
+    options?: { includeHidden?: boolean }
+  ) => Promise<Comment | undefined>;
+  create: (bearId: string, input: NewComment) => Promise<Comment>;
   // Returns whether a comment was removed.
   delete: (id: string) => Promise<boolean>;
   // `lock`: SELECT ... FOR UPDATE, i.e. other transactions that want to lock

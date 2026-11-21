@@ -47,6 +47,7 @@ const LOCATION_HEADER: Record<string, JsonSchema> = {
 const PROBLEM_DESCRIPTIONS: Record<number, string> = {
   400: 'Bad Request: the input is invalid (problem type validation-error, with `errors`) or the body is not valid JSON.',
   401: 'Unauthorized: not logged in, or wrong e-mail or password.',
+  403: 'Forbidden: logged in, but not allowed to do this.',
   404: 'Not Found: the bear or comment does not exist.',
   409: 'Conflict: the request clashes with existing data, e.g. an e-mail address that is already registered.',
   500: 'Internal Server Error: an unexpected error; details are only in the log, under the request id.',

@@ -30,6 +30,11 @@ export const comments = pgTable(
     bearId: text('bear_id')
       .notNull()
       .references(() => bears.id, { onDelete: 'cascade' }),
+    // null for comments from before accounts existed; only moderators may
+    // delete those. A deleted account leaves its comments behind.
+    authorId: uuid('author_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     author: varchar('author', { length: AUTHOR_MAX_LENGTH }).notNull(),
     text: varchar('text', { length: TEXT_MAX_LENGTH }).notNull(),
     // Milliseconds, like JavaScript's Date: a pagination cursor built from a
@@ -50,6 +55,7 @@ export const comments = pgTable(
       table.createdAt,
       table.id
     ),
+    index('comments_author_id_idx').on(table.authorId),
   ]
 );
 

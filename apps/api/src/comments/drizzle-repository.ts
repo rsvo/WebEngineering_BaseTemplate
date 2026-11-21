@@ -20,6 +20,7 @@ type CommentRow = typeof comments.$inferSelect;
 const toComment = (row: CommentRow): Comment => ({
   id: row.id,
   bearId: row.bearId,
+  authorId: row.authorId,
   author: row.author,
   text: row.text,
   createdAt: row.createdAt.toISOString(),
@@ -63,18 +64,23 @@ export function createDrizzleCommentRepository(db: Db): CommentRepository {
       return groupByBear(bearIds, rows.map(toComment));
     },
 
-    findById: async (id) => {
+    findById: async (id, { includeHidden = false } = {}) => {
       const [row] = await db
         .select()
         .from(comments)
-        .where(and(eq(comments.id, id), visible));
+        .where(and(eq(comments.id, id), includeHidden ? undefined : visible));
       return row === undefined ? undefined : toComment(row);
     },
 
     create: async (bearId, input) => {
       const [row] = await db
         .insert(comments)
-        .values({ bearId, author: input.author, text: input.text })
+        .values({
+          bearId,
+          authorId: input.authorId,
+          author: input.author,
+          text: input.text,
+        })
         .returning();
       if (row === undefined) throw new Error('INSERT returned no row');
       return toComment(row);

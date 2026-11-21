@@ -14,7 +14,7 @@ import { SESSION_TTL_SECONDS, type AuthService } from './service.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
-    // The logged-in user, or null. Set by the preHandler hook below.
+    // The logged-in user, or null. Set by the preValidation hook below.
     user: User | null;
   }
 }
@@ -129,7 +129,9 @@ const authRoutes: FastifyPluginAsyncZod<AuthOptions> = async (
 export function registerAuth(app: FastifyInstance, options: AuthOptions): void {
   void app.register(fastifyCookie);
   app.decorateRequest('user', null);
-  app.addHook('preHandler', async (request) => {
+  // preValidation: before route hooks like requireLogin, so an anonymous
+  // request gets a 401 even if its body is also invalid.
+  app.addHook('preValidation', async (request) => {
     const token = request.cookies[SESSION_COOKIE];
     if (token !== undefined) {
       request.user = (await options.auth.authenticate(token)) ?? null;

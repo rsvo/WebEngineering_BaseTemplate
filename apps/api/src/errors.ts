@@ -119,6 +119,16 @@ export class UnauthorizedError extends HttpError {
   }
 }
 
+// Logged in, but not allowed to do this.
+export class ForbiddenError extends HttpError {
+  readonly status = 403;
+
+  constructor(detail: string) {
+    super(detail);
+    this.name = 'ForbiddenError';
+  }
+}
+
 export class NotFoundError extends HttpError {
   readonly status = 404;
 

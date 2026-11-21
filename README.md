@@ -1112,6 +1112,46 @@ curl -i localhost:8080/api/auth/me                         # 401 without a cooki
 
 **SameSite and CSRF.** Cookies are sent automatically, which is what CSRF exploits: another site makes the victim's browser send a request to us, and the browser attaches our cookie. `SameSite=Lax` stops the browser from sending the cookie on cross-site POSTs, fetches and iframes, and only allows it on top-level navigations via links (GETs). Since all our state-changing routes are POST or DELETE, a forged request arrives without a session. A JWT sent in an `Authorization` header isn't sent automatically, so it isn't open to CSRF at all, but that's exactly why it has to be readable by JavaScript, and therefore by XSS.
 
+#### Task 3: Authorisation for comments
+
+Comments get an `author_id`; creating one requires a login (401 otherwise). Deleting is allowed for the author and for moderators (403 otherwise); one moderator is seeded. Enforced in one place on the server; the UI only hides the delete button where the call would fail.
+
+**Implementation:**
+
+- `drizzle/0005_comment_authors.sql`: nullable `author_id → users ON DELETE SET NULL` plus an index. Old comments have no author, so only moderators can delete them.
+- `auth/policy.ts` is the one place for the rules. `requireLogin` is a `preValidation` hook (401 before the body is even validated), and `canDeleteComment(user, comment)` returns `role === 'moderator' || comment.authorId === user.id`. The delete route looks up the comment (404), asks the policy (403), and only then deletes. `author_id` always comes from the session, never from the body.
+- `db/seed.ts` upserts `moderator@example.org` (`MODERATOR_EMAIL`) with `MODERATOR_PASSWORD` from the environment. Compose and `.env.example` have a default for local use only.
+- Web: anonymous users see "Log in to write a comment" instead of the form. The Delete button only shows up on your own comments, or on all of them for a moderator.
+
+```sh
+API=localhost:8080/api; PW='correct horse battery staple'; J='content-type: application/json'
+for who in author other; do
+  curl -s -o /dev/null $API/auth/register -H "$J" -d "{\"email\":\"$who@example.org\",\"password\":\"$PW\"}"
+  curl -s -o /dev/null -c $who.jar $API/auth/login -H "$J" -d "{\"email\":\"$who@example.org\",\"password\":\"$PW\"}"
+done
+curl -s -o /dev/null -c mod.jar $API/auth/login -H "$J" \
+  -d '{"email":"moderator@example.org","password":"local-moderator-password"}'
+new() { curl -s -b author.jar $API/bears/ursus-arctos/comments -H "$J" -d '{"author":"Ann","text":"Hi"}' | sed 's/.*"id":"\([^"]*\)".*/\1/'; }
+del() { curl -s -o /dev/null -w "%{http_code}\n" -X DELETE "$@"; }
+ID=$(new)
+del $API/comments/$ID                 # 401 anonymous
+del -b other.jar $API/comments/$ID    # 403 other user
+del -b author.jar $API/comments/$ID   # 204 author
+del -b mod.jar $API/comments/$(new)   # 204 moderator
+```
+
+**Theory question:** Authentication versus authorisation, 401 versus 403. Explain RBAC and ownership checks, what an IDOR vulnerability is (OWASP A01 Broken Access Control) and why hiding a button in the client is not a security control.
+
+**Answer:**
+
+**Authentication vs. authorisation.** Authentication answers "who are you?", which is the login and the session cookie. Authorisation answers "what may you do?", which is the policy. HTTP's naming is confusing here: 401 "Unauthorized" actually means unauthenticated ("I don't know who you are, log in"), while 403 Forbidden means "I know who you are, and you're not allowed to do this". Logging in again won't help with a 403.
+
+**RBAC and ownership.** Role-based access control grants rights to roles instead of individual users: a moderator may delete any comment. An ownership check looks at the specific object: a user may delete a comment because `author_id` is their id. Most real rules combine both, like our `canDeleteComment`. Keeping it in one function means one place to read, test and fix.
+
+**IDOR.** An Insecure Direct Object Reference is when the server takes an id from the request and acts on it without checking whether this user may touch that object. Before this task, anyone could `DELETE /api/comments/<any id>`. The ids are UUIDs, but they're in every list response, so being hard to guess doesn't protect anything. The fix is the ownership check on every request, on the server. That's why A01 Broken Access Control is the number one OWASP risk: the check is easy to forget on a single route.
+
+**Hiding a button.** The UI isn't the only client. Anyone can send the same request with curl, the browser's DevTools or a script, and they can change the id while doing it. Hiding the button only spares honest users an error message. The 403 from the server is the actual protection, and the matrix above shows it still works when the button isn't there.
+
 ---
 
 ## In-Class Accessibility Workshop

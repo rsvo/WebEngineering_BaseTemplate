@@ -1,4 +1,6 @@
 import { useState, type ReactElement } from 'react';
+import { Link } from 'react-router';
+import { useAuth } from '../auth/AuthContext';
 import { Highlight } from '../search/Highlight';
 import { CommentForm } from './CommentForm';
 import { CommentList } from './CommentList';
@@ -14,6 +16,7 @@ export function CommentsSection({
   query,
 }: CommentsSectionProps): ReactElement {
   const [isOpen, setIsOpen] = useState(false);
+  const { user } = useAuth();
   const {
     state,
     reload,
@@ -40,7 +43,13 @@ export function CommentsSection({
         <font size="6">
           <Highlight text="Add comment" query={query} />
         </font>
-        <CommentForm onAdd={add} />
+        {user === null ? (
+          <p>
+            <Link to="/login">Log in</Link> to write a comment.
+          </p>
+        ) : (
+          <CommentForm onAdd={add} />
+        )}
 
         <font size="6">
           <Highlight text="Comments" query={query} />

@@ -29,11 +29,20 @@ export const CreateCommentSchema = z
 
 export type CreateComment = z.infer<typeof CreateCommentSchema>;
 
-// What the API returns: the server assigns id, bearId and createdAt.
+// What is stored: the author's account comes from the session, not the body.
+export interface NewComment extends CreateComment {
+  authorId?: string;
+}
+
+// What the API returns: the server assigns id, bearId, authorId and createdAt.
 export const CommentSchema = z
   .object({
     id: CommentIdSchema,
     bearId: BearIdSchema,
+    authorId: z.uuid().nullable().meta({
+      description:
+        'Account that wrote it; null for comments from before accounts.',
+    }),
     author: z.string(),
     text: z.string(),
     createdAt: z.iso.datetime(),

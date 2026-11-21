@@ -1,9 +1,14 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import {
+  canDeleteComment,
+  loggedInUser,
+  requireLogin,
+} from '../auth/policy.js';
 import type { BearRepository } from '../bears/repository.js';
 import { getBearOr404 } from '../bears/routes.js';
 import { BearIdSchema } from '../bears/schema.js';
-import { NotFoundError } from '../errors.js';
+import { ForbiddenError, NotFoundError } from '../errors.js';
 import { problemResponses } from '../openapi.js';
 import type { CommentRepository } from './repository.js';
 import {
@@ -86,18 +91,22 @@ export const commentRoutes: FastifyPluginAsyncZod<
         tags: TAGS,
         summary: 'Add a comment to a bear',
         description:
-          'Answers 201 Created with the new comment and its URL in `Location`. Not idempotent: sending the same request twice creates two comments.',
+          'Needs a login. Answers 201 Created with the new comment and its URL in `Location`. Not idempotent: sending the same request twice creates two comments.',
         params: BearParamsSchema,
         body: CreateCommentSchema,
         response: {
           201: CommentSchema,
-          ...problemResponses(400, 404, 500),
+          ...problemResponses(400, 401, 404, 500),
         },
       },
+      preValidation: requireLogin,
     },
     async (request, reply) => {
       const bear = await getBearOr404(bears, request.params.id);
-      const comment = await comments.create(bear.id, request.body);
+      const comment = await comments.create(bear.id, {
+        ...request.body,
+        authorId: loggedInUser(request).id,
+      });
       // 201 + Location: a new resource was created, and this is its URL.
       return await reply
         .code(201)
@@ -137,22 +146,33 @@ export const commentRoutes: FastifyPluginAsyncZod<
         tags: TAGS,
         summary: 'Delete a comment',
         description:
-          'Idempotent: once the comment is gone, repeating the request answers 404 but changes nothing.',
+          'Allowed for its author and for moderators. Idempotent: once the comment is gone, repeating the request answers 404 but changes nothing.',
         params: CommentParamsSchema,
         response: {
           204: z.undefined(),
-          ...problemResponses(400, 404, 500),
+          ...problemResponses(400, 401, 403, 404, 500),
         },
       },
+      preValidation: requireLogin,
     },
     async (request, reply) => {
-      if (!(await comments.delete(request.params.commentId))) {
-        // Repeating a DELETE still leaves the server in the same state (the
-        // comment is gone); only the response tells the client it already was.
+      const { commentId } = request.params;
+      const comment = await comments.findById(commentId, {
+        includeHidden: true,
+      });
+      // Repeating a DELETE still leaves the server in the same state (the
+      // comment is gone); only the response tells the client it already was.
+      if (comment === undefined) {
         throw new NotFoundError(
-          `There is no comment with the id "${request.params.commentId}".`
+          `There is no comment with the id "${commentId}".`
         );
       }
+      if (!canDeleteComment(loggedInUser(request), comment)) {
+        throw new ForbiddenError(
+          'Only its author or a moderator may delete this comment.'
+        );
+      }
+      await comments.delete(commentId);
       return await reply.code(204).send();
     }
   );

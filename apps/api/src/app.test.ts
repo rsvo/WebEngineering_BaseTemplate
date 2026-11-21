@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
+import { hashPassword } from './auth/password.js';
+import {
+  createInMemoryUserRepository,
+  type UserRepository,
+} from './auth/repository.js';
+import type { Role } from './auth/schema.js';
 import { createInMemoryBearRepository } from './bears/repository.js';
 import type { Bear } from './bears/schema.js';
 import { loadConfig } from './config.js';
@@ -42,18 +48,37 @@ const BEARS: Bear[] = [
 describe('bears and comments API', () => {
   let app: FastifyInstance;
   let comments: CommentRepository;
+  let users: UserRepository;
 
   beforeEach(() => {
     comments = createInMemoryCommentRepository();
+    users = createInMemoryUserRepository();
     app = buildApp(config, {
       bears: createInMemoryBearRepository(BEARS),
       comments,
       transaction: createInMemoryTransactor(comments),
+      users,
     });
   });
   afterEach(async () => {
     await app.close();
   });
+
+  // Creates an account and returns its session cookie.
+  async function loginAs(email: string, role: Role = 'user'): Promise<string> {
+    const password = 'correct horse battery staple';
+    await users.create({
+      email,
+      passwordHash: await hashPassword(password),
+      role,
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      body: { email, password },
+    });
+    return String(response.headers['set-cookie']).split(';')[0] ?? '';
+  }
 
   it('counts 50 concurrent reports exactly and hides at 3', async () => {
     const { id } = await comments.create('ursus-arctos', {
@@ -148,9 +173,11 @@ describe('bears and comments API', () => {
   });
 
   it('creates, lists and deletes a comment', async () => {
+    const cookie = await loginAs('ann@example.org');
     const created = await app.inject({
       method: 'POST',
       url: '/api/bears/ursus-arctos/comments',
+      headers: { cookie },
       payload: { author: ' Ann ', text: 'Big!' },
     });
     assert.equal(created.statusCode, 201);
@@ -164,16 +191,62 @@ describe('bears and comments API', () => {
       [id]
     );
 
-    const url = `/api/comments/${id}`;
-    assert.equal((await app.inject({ method: 'DELETE', url })).statusCode, 204);
+    const remove = async (): Promise<number> =>
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/api/comments/${id}`,
+          headers: { cookie },
+        })
+      ).statusCode;
+    assert.equal(await remove(), 204);
     // Idempotent: the state stays the same, only the answer differs.
-    assert.equal((await app.inject({ method: 'DELETE', url })).statusCode, 404);
+    assert.equal(await remove(), 404);
+  });
+
+  it('lets only the author or a moderator delete: 401, 403, 204, 204', async () => {
+    const author = await loginAs('author@example.org');
+    const other = await loginAs('other@example.org');
+    const moderator = await loginAs('mod@example.org', 'moderator');
+    const create = async (): Promise<string> =>
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/bears/ursus-arctos/comments',
+          headers: { cookie: author },
+          payload: { author: 'Ann', text: 'Hi' },
+        })
+      ).json<{ id: string }>().id;
+    const remove = async (id: string, cookie?: string): Promise<number> =>
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/api/comments/${id}`,
+          headers: cookie === undefined ? {} : { cookie },
+        })
+      ).statusCode;
+
+    const first = await create();
+    assert.equal(await remove(first), 401);
+    assert.equal(await remove(first, other), 403);
+    assert.equal(await remove(first, author), 204);
+    assert.equal(await remove(await create(), moderator), 204);
+
+    // Anonymous: 401 first, even though the body is invalid too.
+    const anonymous = await app.inject({
+      method: 'POST',
+      url: '/api/bears/ursus-arctos/comments',
+      payload: { author: '' },
+    });
+    assert.equal(anonymous.statusCode, 401);
   });
 
   it('rejects invalid comments and unknown bears', async () => {
+    const cookie = await loginAs('ann@example.org');
     const invalid = await app.inject({
       method: 'POST',
       url: '/api/bears/ursus-arctos/comments',
+      headers: { cookie },
       payload: { author: '', text: 'x' },
     });
     assert.equal(invalid.statusCode, 400);
@@ -182,6 +255,7 @@ describe('bears and comments API', () => {
     const unknownBear = await app.inject({
       method: 'POST',
       url: '/api/bears/ursus-nope/comments',
+      headers: { cookie },
       payload: { author: 'Ann', text: 'Hi' },
     });
     assert.equal(unknownBear.statusCode, 404);

@@ -1,5 +1,6 @@
 import { useState, type ReactElement } from 'react';
 import { messageFromError } from '../../utils/errors';
+import { useAuth } from '../auth/AuthContext';
 import { Highlight } from '../search/Highlight';
 import type { CommentEntry, ReportResult } from './types';
 
@@ -21,6 +22,11 @@ export function CommentList({
   const [busy, setBusy] = useState<{ id: string; action: Action } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { user } = useAuth();
+  // Mirrors the API's policy only to hide a button that would fail anyway;
+  // the API enforces it.
+  const canDelete = (comment: CommentEntry): boolean =>
+    user != null && (user.role === 'moderator' || user.id === comment.authorId);
 
   async function run(
     id: string,
@@ -89,19 +95,23 @@ export function CommentList({
               >
                 {isBusy && busy.action === 'report' ? 'Reporting...' : 'Report'}
               </button>
-              <button
-                type="button"
-                className="delete-comment"
-                disabled={isBusy}
-                aria-label={`Delete comment by ${comment.author}`}
-                onClick={() => {
-                  void run(comment.id, 'delete', async () => {
-                    await onDelete(comment.id);
-                  });
-                }}
-              >
-                {isBusy && busy.action === 'delete' ? 'Deleting...' : 'Delete'}
-              </button>
+              {canDelete(comment) && (
+                <button
+                  type="button"
+                  className="delete-comment"
+                  disabled={isBusy}
+                  aria-label={`Delete comment by ${comment.author}`}
+                  onClick={() => {
+                    void run(comment.id, 'delete', async () => {
+                      await onDelete(comment.id);
+                    });
+                  }}
+                >
+                  {isBusy && busy.action === 'delete'
+                    ? 'Deleting...'
+                    : 'Delete'}
+                </button>
+              )}
             </li>
           );
         })}

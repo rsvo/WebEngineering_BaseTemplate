@@ -34,6 +34,10 @@ services:
       # block Wikipedia; the seed then falls back to apps/api/fixtures.
       WIKIPEDIA_API_URL: ${WIKIPEDIA_API_URL:-}
       UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-}
+      # The seeded moderator. The default is for local use only; set your own
+      # MODERATOR_PASSWORD (e.g. in a git-ignored .env) anywhere else.
+      MODERATOR_EMAIL: ${MODERATOR_EMAIL:-moderator@example.org}
+      MODERATOR_PASSWORD: ${MODERATOR_PASSWORD:-local-moderator-password}
     depends_on:
       db:
         condition: service_healthy

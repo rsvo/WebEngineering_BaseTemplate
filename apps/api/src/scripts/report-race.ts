@@ -22,11 +22,12 @@ const pool = new pg.Pool({ connectionString: loadConfig().database.url });
 try {
   const [bear] = (await api('/bears')) as Array<{ id: string }>;
   if (bear === undefined) throw new Error('no bears, run db:seed first');
-  const { id } = (await api(`/bears/${bear.id}/comments`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ author: 'Race script', text: 'Report me!' }),
-  })) as { id: string };
+  // Inserted directly: creating comments over HTTP needs a login.
+  const created = await pool.query<{ id: string }>(
+    "INSERT INTO comments (bear_id, author, text) VALUES ($1, 'Race script', 'Report me!') RETURNING id",
+    [bear.id]
+  );
+  const id = created.rows[0]?.id ?? '';
 
   const results = (await Promise.all(
     Array.from(

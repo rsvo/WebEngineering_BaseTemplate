@@ -19,12 +19,14 @@ const newestFirst = (a: Comment, b: Comment): number => {
 const toComment = ({
   id,
   bearId,
+  authorId,
   author,
   text,
   createdAt,
 }: Comment): Comment => ({
   id,
   bearId,
+  authorId,
   author,
   text,
   createdAt,
@@ -53,9 +55,10 @@ export function createInMemoryCommentRepository(): CommentRepository {
     listByBears: async (bearIds) =>
       groupByBear(bearIds, visible().map(toComment)),
 
-    findById: async (id) => {
+    findById: async (id, { includeHidden = false } = {}) => {
       const comment = comments.get(id);
-      return comment === undefined || comment.hiddenAt !== null
+      return comment === undefined ||
+        (comment.hiddenAt !== null && !includeHidden)
         ? undefined
         : toComment(comment);
     },
@@ -64,6 +67,7 @@ export function createInMemoryCommentRepository(): CommentRepository {
       const comment: Comment = {
         id: randomUUID(),
         bearId,
+        authorId: input.authorId ?? null,
         author: input.author,
         text: input.text,
         createdAt: new Date().toISOString(),
