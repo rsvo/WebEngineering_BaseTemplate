@@ -1,13 +1,17 @@
 import { useState, type FormEvent, type ReactElement } from 'react';
 import { ApiError, type FieldError } from '../../api/client';
 import { messageFromError } from '../../utils/errors';
-import { register } from './api';
 import {
   EMAIL_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
-  type User,
+  type Credentials,
 } from './types';
+
+interface CredentialsFormProps {
+  mode: 'login' | 'register';
+  onSubmit: (credentials: Credentials) => Promise<void>;
+}
 
 const FIELD_LABELS: Readonly<Record<string, string>> = {
   '/email': 'E-mail',
@@ -19,13 +23,16 @@ function describeFieldError({ pointer, detail }: FieldError): string {
   return label === undefined ? detail : `${label} ${detail}.`;
 }
 
-export function RegisterForm(): ReactElement {
+export function CredentialsForm({
+  mode,
+  onSubmit,
+}: CredentialsFormProps): ReactElement {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<readonly FieldError[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [registered, setRegistered] = useState<User | null>(null);
+  const isRegister = mode === 'register';
 
   const isInvalid = (pointer: string): boolean =>
     fieldErrors.some((fieldError) => fieldError.pointer === pointer);
@@ -33,14 +40,10 @@ export function RegisterForm(): ReactElement {
   async function submit(): Promise<void> {
     setIsSubmitting(true);
     try {
-      setRegistered(await register({ email, password }));
-      setPassword('');
-      setError(null);
-      setFieldErrors([]);
+      await onSubmit({ email, password });
     } catch (err) {
       setError(messageFromError(err));
       setFieldErrors(err instanceof ApiError ? err.errors : []);
-    } finally {
       setIsSubmitting(false);
     }
   }
@@ -48,12 +51,6 @@ export function RegisterForm(): ReactElement {
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     if (!isSubmitting) void submit();
-  }
-
-  if (registered !== null) {
-    return (
-      <p role="status">Your account {registered.email} has been created.</p>
-    );
   }
 
   return (
@@ -93,26 +90,28 @@ export function RegisterForm(): ReactElement {
         <input
           type="password"
           id="password"
-          autoComplete="new-password"
+          autoComplete={isRegister ? 'new-password' : 'current-password'}
           required
-          minLength={PASSWORD_MIN_LENGTH}
+          minLength={isRegister ? PASSWORD_MIN_LENGTH : undefined}
           maxLength={PASSWORD_MAX_LENGTH}
           aria-invalid={isInvalid('/password')}
-          aria-describedby="password-hint"
+          aria-describedby={isRegister ? 'password-hint' : undefined}
           value={password}
           onChange={(event) => {
             setPassword(event.target.value);
           }}
         />
       </div>
-      <p id="password-hint" className="hint">
-        At least {PASSWORD_MIN_LENGTH} characters. A few random words make a
-        good password.
-      </p>
+      {isRegister && (
+        <p id="password-hint" className="hint">
+          At least {PASSWORD_MIN_LENGTH} characters. A few random words make a
+          good password.
+        </p>
+      )}
       <div>
         <input
           type="submit"
-          value={isSubmitting ? 'Creating account...' : 'Create account'}
+          value={isRegister ? 'Create account' : 'Log in'}
           disabled={isSubmitting}
         />
       </div>

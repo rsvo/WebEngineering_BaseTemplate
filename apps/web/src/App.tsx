@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Route, Routes, useSearchParams } from 'react-router';
+import { AuthStatus } from './features/auth/AuthStatus';
 import { useBears } from './features/bears/useBears';
 import { Footer } from './features/layout/Footer';
 import { Header } from './features/layout/Header';
@@ -10,7 +11,7 @@ import { SearchForm } from './features/search/SearchForm';
 import { BearDetailPage } from './pages/BearDetailPage';
 import { HomePage } from './pages/HomePage';
 import { NotFoundPage } from './pages/NotFoundPage';
-import { RegisterPage } from './pages/RegisterPage';
+import { AuthPage } from './pages/AuthPage';
 
 export function App(): ReactElement {
   // The search term lives in the URL (?q=...), so a search can be shared,
@@ -31,6 +32,7 @@ export function App(): ReactElement {
       <Header />
       <NavBar links={NAV_LINKS}>
         <SearchForm key={query} initialQuery={query} onSearch={handleSearch} />
+        <AuthStatus />
       </NavBar>
 
       <main>
@@ -49,7 +51,8 @@ export function App(): ReactElement {
             path="/bears/:bearId"
             element={<BearDetailPage query={query} />}
           />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/login" element={<AuthPage mode="login" />} />
+          <Route path="/register" element={<AuthPage mode="register" />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
         <RelatedLinks links={RELATED_LINKS} />

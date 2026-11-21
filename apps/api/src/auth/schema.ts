@@ -36,6 +36,20 @@ export const CredentialsSchema = z
 
 export type Credentials = z.infer<typeof CredentialsSchema>;
 
+// Login only checks the shape: the length rule is for new passwords.
+export const LoginSchema = z
+  .strictObject({
+    email: z.email('must be an e-mail address').toLowerCase(),
+    password: z
+      .string()
+      .min(1, 'must not be empty')
+      .max(
+        PASSWORD_MAX_LENGTH,
+        `must be at most ${PASSWORD_MAX_LENGTH} characters`
+      ),
+  })
+  .meta({ id: 'Login' });
+
 // What the API returns about a user: never the password hash.
 export const UserSchema = z
   .object({

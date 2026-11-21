@@ -110,6 +110,15 @@ export class ClientError extends HttpError {
   }
 }
 
+export class UnauthorizedError extends HttpError {
+  readonly status = 401;
+
+  constructor(detail: string) {
+    super(detail);
+    this.name = 'UnauthorizedError';
+  }
+}
+
 export class NotFoundError extends HttpError {
   readonly status = 404;
 

@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, sql } from 'drizzle-orm';
 import type { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import { users } from '../db/schema.js';
+import { sessions, users } from '../db/schema.js';
 import { toUser, type UserRecord, type UserRepository } from './repository.js';
 
 type Db = PgDatabase<NodePgQueryResultHKT>;
@@ -26,6 +26,25 @@ export function createDrizzleUserRepository(db: Db): UserRepository {
     findByEmail: async (email) => {
       const [row] = await db.select().from(users).where(eq(users.email, email));
       return row === undefined ? undefined : toRecord(row);
+    },
+
+    createSession: async (session) => {
+      await db.insert(sessions).values(session);
+    },
+
+    findSessionUser: async (sessionId) => {
+      const [row] = await db
+        .select({ user: users })
+        .from(sessions)
+        .innerJoin(users, eq(sessions.userId, users.id))
+        .where(
+          and(eq(sessions.id, sessionId), gt(sessions.expiresAt, sql`now()`))
+        );
+      return row === undefined ? undefined : toUser(toRecord(row.user));
+    },
+
+    deleteSession: async (sessionId) => {
+      await db.delete(sessions).where(eq(sessions.id, sessionId));
     },
   };
 }

@@ -46,6 +46,7 @@ const LOCATION_HEADER: Record<string, JsonSchema> = {
 
 const PROBLEM_DESCRIPTIONS: Record<number, string> = {
   400: 'Bad Request: the input is invalid (problem type validation-error, with `errors`) or the body is not valid JSON.',
+  401: 'Unauthorized: not logged in, or wrong e-mail or password.',
   404: 'Not Found: the bear or comment does not exist.',
   409: 'Conflict: the request clashes with existing data, e.g. an e-mail address that is already registered.',
   500: 'Internal Server Error: an unexpected error; details are only in the log, under the request id.',
@@ -147,7 +148,7 @@ export function registerOpenApi(app: FastifyInstance): void {
       tags: [
         { name: 'bears', description: 'Bears from Wikipedia, normalised' },
         { name: 'comments', description: 'Comments on bears (in memory)' },
-        { name: 'auth', description: 'Accounts' },
+        { name: 'auth', description: 'Accounts and sessions' },
         { name: 'operations', description: 'Health and diagnostics' },
       ],
     },

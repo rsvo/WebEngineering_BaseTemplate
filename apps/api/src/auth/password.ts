@@ -13,3 +13,16 @@ const OPTIONS = {
 export async function hashPassword(password: string): Promise<string> {
   return await argon2.hash(password, OPTIONS);
 }
+
+let dummyHash: Promise<string> | undefined;
+
+// Without a stored hash (unknown e-mail) a dummy is checked anyway, so the
+// answer takes as long as for a wrong password and reveals no accounts.
+export async function verifyPassword(
+  hash: string | undefined,
+  password: string
+): Promise<boolean> {
+  dummyHash ??= hashPassword('no such user, same amount of work');
+  const valid = await argon2.verify(hash ?? (await dummyHash), password);
+  return hash !== undefined && valid;
+}

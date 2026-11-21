@@ -51,6 +51,9 @@ services:
       # Off in production; ENABLE_DEBUG_ROUTES=true adds GET /api/debug/error
       # to provoke a 500 and show that it leaks nothing.
       ENABLE_DEBUG_ROUTES: ${ENABLE_DEBUG_ROUTES:-}
+      # Session cookies are Secure in production. Browsers accept that on
+      # http://localhost; set COOKIE_SECURE=false for plain HTTP elsewhere.
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
       # Comma-separated origins allowed to call the API cross-origin, e.g.
       # CORS_ORIGINS=http://localhost:4173. Empty: none; the web app below
       # reaches the API through nginx on its own origin and needs no CORS.

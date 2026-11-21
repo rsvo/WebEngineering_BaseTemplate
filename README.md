@@ -1070,6 +1070,48 @@ docker compose exec db psql -U bears -c 'SELECT email, password_hash FROM users'
 
 **409 and enumeration.** A clear 409 tells the user what happened: "you already have an account, log in instead." But it also tells an attacker whether an address is registered, so they can check a list of e-mails and then target those accounts with phishing or password guessing. The safe alternative is to always answer the same way ("check your inbox") and send the details by e-mail, which needs a mail flow we don't have. I chose the clear 409 because the bears site isn't sensitive. Rate limiting on register (Task 4) makes checking a whole list slow, and the timing doesn't leak anything because the password gets hashed in both cases.
 
+#### Task 2: Login and session, with a written decision
+
+`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`. Decide between a server-side session and a JWT and record it in a short ADR. The cookie flags must be right, and logout must really invalidate the credential. The React app shows the logged-in user and a logout button.
+
+**ADR 1: Server-side sessions instead of JWTs**
+
+- **Context:** One API and one database, same-origin web app behind a proxy. Logout must really end a session.
+- **Options:** (a) Random session id in an HttpOnly cookie, sessions in PostgreSQL. (b) Signed JWT in a cookie or `localStorage`, verified without a database lookup.
+- **Decision:** (a). The cookie holds 256 random bits; the `sessions` table only stores their SHA-256, the user and an expiry (7 days).
+- **Consequences:** Logout and "log out everywhere" are a `DELETE`. Every authenticated request costs one indexed lookup, which is fine for us. Scaling out needs no shared secret, only the shared database. We give up stateless verification, which we don't need.
+
+**Implementation:**
+
+- `drizzle/0004_sessions.sql`: `sessions (id = sha256(token), user_id → users ON DELETE CASCADE, expires_at)`.
+- `auth/service.ts`: `login` checks the password with `argon2.verify`. For an unknown e-mail it checks a dummy hash, so both cases take the same time and answer the same 401. Every login creates a new token (no session fixation).
+- `auth/routes.ts`: the cookie is `HttpOnly; SameSite=Lax; Path=/api; Max-Age=604800`, plus `Secure` in production (`COOKIE_SECURE` overrides it; browsers and curl accept it on `http://localhost`). Logout deletes the row and clears the cookie. A `preHandler` hook sets `request.user` for every route, which Task 3 builds on.
+- Web: an `AuthProvider` asks `/api/auth/me` on load, since JavaScript can't see the cookie. The nav bar shows "Log in / Register" or the e-mail and "Log out". Registering logs you in right away.
+
+```sh
+curl -s localhost:8080/api/auth/register -H 'content-type: application/json' \
+  -d '{"email":"ann@example.org","password":"correct horse battery staple"}'
+curl -i -c jar localhost:8080/api/auth/login -H 'content-type: application/json' \
+  -d '{"email":"ann@example.org","password":"correct horse battery staple"}'
+# set-cookie: session=...; Max-Age=604800; Path=/api; HttpOnly; Secure; SameSite=Lax
+curl -b jar localhost:8080/api/auth/me                     # 200, the user
+cp jar old-jar && curl -b jar -c jar -X POST localhost:8080/api/auth/logout   # 204
+curl -i -b old-jar localhost:8080/api/auth/me              # 401: the copied cookie is dead
+curl -i localhost:8080/api/auth/me                         # 401 without a cookie
+```
+
+**Theory question:** Compare session cookies and JWTs regarding revocation, statelessness, size and storage in the browser. What does an XSS attacker get in each case, and how does SameSite relate to CSRF?
+
+**Answer:**
+
+**Revocation and state.** A session is just a row in a table, so deleting the row ends it right away. A JWT is valid until it expires because the server verifies it without looking anything up. To revoke one early, you need a deny-list, and then you're back to a database lookup. So JWTs are "stateless" only as long as you can live without real logout. That's why JWTs are usually short-lived and paired with a refresh token, which is basically a session again.
+
+**Size and storage.** A session cookie is about 45 characters. A JWT carries its claims and signature and is often several hundred bytes, sent along with every request. A session id can only live in an HttpOnly cookie. JWTs often end up in `localStorage`, where any script on the page can read them.
+
+**XSS.** With an HttpOnly cookie, injected script can't read the credential. It can still send requests as the user while the page is open, but it can't take the session with it. A JWT in `localStorage` can be stolen and used from anywhere until it expires. XSS is bad either way, but the cookie limits the damage to "while the tab is open".
+
+**SameSite and CSRF.** Cookies are sent automatically, which is what CSRF exploits: another site makes the victim's browser send a request to us, and the browser attaches our cookie. `SameSite=Lax` stops the browser from sending the cookie on cross-site POSTs, fetches and iframes, and only allows it on top-level navigations via links (GETs). Since all our state-changing routes are POST or DELETE, a forged request arrives without a session. A JWT sent in an `Authorization` header isn't sent automatically, so it isn't open to CSRF at all, but that's exactly why it has to be readable by JavaScript, and therefore by XSS.
+
 ---
 
 ## In-Class Accessibility Workshop

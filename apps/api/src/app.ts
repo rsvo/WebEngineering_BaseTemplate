@@ -8,7 +8,7 @@ import {
 } from 'fastify-type-provider-zod';
 import { createDrizzleUserRepository } from './auth/drizzle-repository.js';
 import type { UserRepository } from './auth/repository.js';
-import { authRoutes } from './auth/routes.js';
+import { registerAuth } from './auth/routes.js';
 import { createAuthService } from './auth/service.js';
 import { createDrizzleBearRepository } from './bears/drizzle-repository.js';
 import type { BearRepository } from './bears/repository.js';
@@ -119,9 +119,9 @@ export function buildApp(
   }
 
   void app.register(healthRoutes, { db });
-  void app.register(authRoutes, {
-    prefix: '/api',
+  registerAuth(app, {
     auth: createAuthService({ users }),
+    secureCookies: config.secureCookies,
   });
   void app.register(bearRoutes, { prefix: '/api', bears });
   void app.register(commentRoutes, {

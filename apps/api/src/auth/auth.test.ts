@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import {
@@ -29,7 +29,9 @@ describe('registration', () => {
     await app.close();
   });
 
-  const register = async (body: unknown): ReturnType<typeof app.inject> =>
+  const register = async (
+    body: Record<string, unknown>
+  ): Promise<LightMyRequestResponse> =>
     await app.inject({ method: 'POST', url: '/api/auth/register', body });
 
   it('stores only an argon2id hash and never returns it', async () => {
@@ -88,5 +90,51 @@ describe('registration', () => {
       password: 'bears like honey a lot',
     });
     assert.equal(response.statusCode, 201);
+  });
+
+  it('logs in with a session cookie that logout really invalidates', async () => {
+    const credentials = {
+      email: 'ann@example.org',
+      password: 'correct horse battery staple',
+    };
+    await register(credentials);
+    const me = async (cookie?: string): Promise<number> =>
+      (
+        await app.inject({
+          url: '/api/auth/me',
+          headers: cookie === undefined ? {} : { cookie },
+        })
+      ).statusCode;
+
+    const wrong = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      body: { ...credentials, password: 'wrong password!' },
+    });
+    assert.equal(wrong.statusCode, 401);
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      body: credentials,
+    });
+    assert.equal(login.statusCode, 200);
+    const setCookie = String(login.headers['set-cookie']);
+    assert.match(setCookie, /HttpOnly/);
+    assert.match(setCookie, /SameSite=Lax/);
+    assert.match(setCookie, /Path=\/api/);
+    const cookie = setCookie.split(';')[0] ?? '';
+
+    assert.equal(await me(cookie), 200);
+    assert.equal(await me(), 401);
+
+    const logout = await app.inject({
+      method: 'POST',
+      url: '/api/auth/logout',
+      headers: { cookie },
+    });
+    assert.equal(logout.statusCode, 204);
+    // A copy of the old cookie is worthless now.
+    assert.equal(await me(cookie), 401);
   });
 });

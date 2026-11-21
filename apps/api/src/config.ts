@@ -19,6 +19,7 @@ export interface Config {
   logLevel: string;
   prettyLogs: boolean;
   enableDebugRoutes: boolean;
+  secureCookies: boolean;
   corsOrigins: readonly string[];
   database: DatabaseConfig;
   wikipedia: WikipediaConfig;
@@ -64,6 +65,8 @@ const EnvSchema = z.object({
   UPSTREAM_TIMEOUT_MS: int(1, 60_000).default(5000),
 
   ENABLE_DEBUG_ROUTES: z.stringbool().optional(),
+  // Secure cookies are only sent over HTTPS (browsers treat localhost as such).
+  COOKIE_SECURE: z.stringbool().optional(),
   // `naive` brings back the lost-update race of POST /comments/:id/report.
   REPORT_MODE: z.enum(['naive', 'locked']).default('locked'),
   CORS_ORIGINS: z
@@ -99,6 +102,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     logLevel: e.LOG_LEVEL,
     prettyLogs: !production,
     enableDebugRoutes: e.ENABLE_DEBUG_ROUTES ?? !production,
+    secureCookies: e.COOKIE_SECURE ?? production,
     // Empty: no cross-origin access at all. The web app does not need it, as it
     // reaches the API through a same-origin proxy (Vite in dev, nginx in Docker).
     corsOrigins: e.CORS_ORIGINS,

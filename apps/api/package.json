@@ -21,6 +21,7 @@
     "race:reports": "tsx --env-file=.env.example --env-file-if-exists=.env src/scripts/report-race.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.5",
     "@fastify/cors": "^11.4.1",
     "@fastify/swagger": "^9.9.3",
     "@fastify/swagger-ui": "^6.1.3",
