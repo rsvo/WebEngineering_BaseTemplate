@@ -1029,6 +1029,47 @@ All 50 requests answered 200 in both modes. In naive mode, the API told up to 40
 
 **Optimistic concurrency** takes no lock. It reads the row together with its `version` and writes with `UPDATE ... SET ..., version = version + 1 WHERE id = $1 AND version = $2`. If no row was updated, someone else got there first, and you retry or answer 409. That's great when conflicts are rare, and it even works across requests (a user editing a form for minutes, with `ETag`/`If-Match`). For 50 reports on the same row at the same moment it's a bad fit, because almost every attempt would conflict and retry.
 
+## 6. Authentication and Security
+
+### Tasks
+
+#### Task 1: Users and password storage
+
+A `users` table via migration (id, unique email, password_hash, role, created_at). `POST /api/auth/register` validates the e-mail format and a password length of at least 12 with zod, without composition rules. Passwords are hashed with argon2id and only the hash is stored; a duplicate e-mail yields a 409 Problem.
+
+**Implementation:**
+
+- `drizzle/0003_users.sql` (generated): `users` with a `uuid` key, `email varchar(254) UNIQUE`, `password_hash`, `role` as the enum `user_role ('user', 'moderator')` with default `user`, and `created_at`.
+- `auth/schema.ts`: the body is a strict object, so a client can't send `role` along. E-mails are lowercased, so `Ann@x.org` and `ann@x.org` are the same account. Passwords need 12 to 256 characters and nothing else.
+- `auth/password.ts`: `argon2` with argon2id and OWASP's minimum parameters (19 MiB, 2 passes, 1 lane). The result is a PHC string that carries the salt and the parameters, about 20 ms per hash.
+- `auth/drizzle-repository.ts`: `INSERT ... ON CONFLICT (email) DO NOTHING RETURNING`. No row back means the address is taken, and the route answers 409 `ConflictError`. The unique constraint decides, so two parallel registrations can't both win. The hash is computed before the insert, so a taken address takes as long as a new one.
+- Web: "Register" in the nav bar opens `/register`, which shows the field errors of a 400 and the detail of a 409.
+
+```sh
+curl -i localhost:3000/api/auth/register -H 'content-type: application/json' \
+  -d '{"email":"ann@example.org","password":"correct horse battery staple"}'   # 201
+curl -i localhost:3000/api/auth/register -H 'content-type: application/json' \
+  -d '{"email":"Ann@Example.org","password":"another long password"}'        # 409
+curl -i localhost:3000/api/auth/register -H 'content-type: application/json' \
+  -d '{"email":"nope","password":"Sh0rt!"}'                                 # 400, two errors
+docker compose exec db psql -U bears -c 'SELECT email, password_hash FROM users'
+# ann@example.org | $argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>
+```
+
+**Theory question:** Why hash instead of encrypt, what do salt and work factor do, and why is a deliberately slow hash a feature? Why does NIST SP 800-63B prefer length over composition rules? What is the trade-off between a clear 409 and user enumeration?
+
+**Answer:**
+
+**Hash, not encrypt.** Encryption can be reversed by whoever has the key, and the key sits on the same server as the data. If someone steals the database, there's a good chance they get the key too, and then every password at once. A hash only goes one way. To log someone in, we don't need the password back; we hash what they typed and compare.
+
+**Salt and work factor.** The salt is a random value per user that gets hashed together with the password. Two users with the same password end up with different hashes, and an attacker can't use precomputed tables; they have to attack each hash separately. The work factor (here memory, passes and lanes) decides how expensive a single hash is. Both are stored in the hash string, so we can raise the cost later without breaking old hashes.
+
+**Slow on purpose.** For us, 20 ms per login doesn't matter. For an attacker who guesses billions of passwords against a stolen hash, it does: every guess costs the same 20 ms and 19 MiB. argon2id is memory-hard, so GPUs, which have lots of cores but little memory per core, lose most of their advantage.
+
+**Length over composition.** Rules like "one digit, one symbol" make passwords harder to remember, not harder to guess. People just write `Password1!`, and cracking tools try those patterns first. Length adds far more guesses, and a few random words are long and still easy to remember. NIST therefore asks for a minimum length, a high maximum, no composition rules and no forced changes, plus a check against known leaked passwords.
+
+**409 and enumeration.** A clear 409 tells the user what happened: "you already have an account, log in instead." But it also tells an attacker whether an address is registered, so they can check a list of e-mails and then target those accounts with phishing or password guessing. The safe alternative is to always answer the same way ("check your inbox") and send the details by e-mail, which needs a mail flow we don't have. I chose the clear 409 because the bears site isn't sensitive. Rate limiting on register (Task 4) makes checking a whole list slow, and the timing doesn't leak anything because the password gets hashed in both cases.
+
 ---
 
 ## In-Class Accessibility Workshop

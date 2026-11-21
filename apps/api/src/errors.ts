@@ -119,6 +119,16 @@ export class NotFoundError extends HttpError {
   }
 }
 
+// The request clashes with the current state, e.g. an e-mail already in use.
+export class ConflictError extends HttpError {
+  readonly status = 409;
+
+  constructor(detail: string) {
+    super(detail);
+    this.name = 'ConflictError';
+  }
+}
+
 // A dependency this instance needs (the database) is not available.
 export class ServiceUnavailableError extends HttpError {
   readonly status = 503;

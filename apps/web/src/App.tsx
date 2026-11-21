@@ -10,6 +10,7 @@ import { SearchForm } from './features/search/SearchForm';
 import { BearDetailPage } from './pages/BearDetailPage';
 import { HomePage } from './pages/HomePage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { RegisterPage } from './pages/RegisterPage';
 
 export function App(): ReactElement {
   // The search term lives in the URL (?q=...), so a search can be shared,
@@ -48,6 +49,7 @@ export function App(): ReactElement {
             path="/bears/:bearId"
             element={<BearDetailPage query={query} />}
           />
+          <Route path="/register" element={<RegisterPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
         <RelatedLinks links={RELATED_LINKS} />

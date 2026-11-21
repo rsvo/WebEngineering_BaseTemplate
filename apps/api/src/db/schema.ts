@@ -1,12 +1,14 @@
 import {
   index,
   integer,
+  pgEnum,
   pgTable,
   text,
   timestamp,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { EMAIL_MAX_LENGTH, ROLES } from '../auth/schema.js';
 import { AUTHOR_MAX_LENGTH, TEXT_MAX_LENGTH } from '../comments/schema.js';
 
 // Natural key: the slug of the binomial name is stable, unique and already
@@ -50,3 +52,17 @@ export const comments = pgTable(
     ),
   ]
 );
+
+export const userRole = pgEnum('user_role', ROLES);
+
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  // Stored lowercased, so the unique constraint ignores case.
+  email: varchar('email', { length: EMAIL_MAX_LENGTH }).notNull().unique(),
+  // argon2id in PHC format; the plain password is never stored.
+  passwordHash: text('password_hash').notNull(),
+  role: userRole('role').notNull().default('user'),
+  createdAt: timestamp('created_at', { withTimezone: true, precision: 3 })
+    .notNull()
+    .defaultNow(),
+});

@@ -6,6 +6,10 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod';
+import { createDrizzleUserRepository } from './auth/drizzle-repository.js';
+import type { UserRepository } from './auth/repository.js';
+import { authRoutes } from './auth/routes.js';
+import { createAuthService } from './auth/service.js';
 import { createDrizzleBearRepository } from './bears/drizzle-repository.js';
 import type { BearRepository } from './bears/repository.js';
 import { bearRoutes } from './bears/routes.js';
@@ -33,6 +37,7 @@ export interface AppDependencies {
   bears?: BearRepository;
   comments?: CommentRepository;
   transaction?: Transactor;
+  users?: UserRepository;
 }
 
 // Builds the app without listening, so it can also be exercised with
@@ -103,6 +108,7 @@ export function buildApp(
   // Routes only see the interfaces; the implementation is injected here.
   const bears = dependencies.bears ?? createDrizzleBearRepository(orm);
   const comments = dependencies.comments ?? createDrizzleCommentRepository(orm);
+  const users = dependencies.users ?? createDrizzleUserRepository(orm);
   const commentService = createCommentService({
     comments,
     transaction: dependencies.transaction ?? createDrizzleTransactor(orm),
@@ -113,6 +119,10 @@ export function buildApp(
   }
 
   void app.register(healthRoutes, { db });
+  void app.register(authRoutes, {
+    prefix: '/api',
+    auth: createAuthService({ users }),
+  });
   void app.register(bearRoutes, { prefix: '/api', bears });
   void app.register(commentRoutes, {
     prefix: '/api',

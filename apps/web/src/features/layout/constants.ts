@@ -5,6 +5,7 @@ export const NAV_LINKS: readonly NavLink[] = [
   { label: 'Our team', href: '#' },
   { label: 'Projects', href: '#' },
   { label: 'Blog', href: '#' },
+  { label: 'Register', href: '/register' },
 ];
 
 export const RELATED_LINKS: readonly NavLink[] = [

@@ -199,22 +199,26 @@ audio {
   margin-bottom: 0;
 }
 
-.comment-form {
+.comment-form,
+.auth-form {
   margin-bottom: 3rem;
 }
 
-.comment-form .flex-pair {
+.comment-form .flex-pair,
+.auth-form .flex-pair {
   display: flex;
   padding: 0 3rem 1rem;
 }
 
-.comment-form label {
+.comment-form label,
+.auth-form label {
   align-self: center;
   flex: 2;
   text-align: right;
 }
 
-.comment-form input {
+.comment-form input,
+.auth-form input {
   margin-left: 1rem;
   flex: 6;
 }
@@ -224,18 +228,26 @@ audio {
   width: 150px;
 }
 
-.comment-form input, .comment-form label, .show-hide {
+.comment-form input, .comment-form label, .show-hide,
+.auth-form input, .auth-form label, .auth-form .hint {
   font-size: 1.6rem;
   line-height: 32px;
 }
 
-.comment-form input[type="submit"], .show-hide {
+.auth-form .hint {
+  margin: 0 3rem 1rem;
+  text-align: center;
+}
+
+.comment-form input[type="submit"], .show-hide,
+.auth-form input[type="submit"] {
   background: #333;
   border: 0;
   color: white;
 }
 
-.comment-form input[type="submit"] {
+.comment-form input[type="submit"],
+.auth-form input[type="submit"] {
   width: 30%;
   display: block;
   margin: 0 auto;
@@ -307,7 +319,8 @@ audio {
 .report-comment:disabled,
 .delete-comment:disabled,
 .load-more:disabled,
-.comment-form input[type="submit"]:disabled {
+.comment-form input[type="submit"]:disabled,
+.auth-form input[type="submit"]:disabled {
   opacity: 0.6;
   cursor: wait;
 }

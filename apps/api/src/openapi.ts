@@ -40,13 +40,14 @@ const LOCATION_HEADER: Record<string, JsonSchema> = {
   location: {
     type: 'string',
     format: 'uri-reference',
-    description: 'URL of the created resource.',
+    description: 'URL of the created resource, if it has one of its own.',
   },
 };
 
 const PROBLEM_DESCRIPTIONS: Record<number, string> = {
   400: 'Bad Request: the input is invalid (problem type validation-error, with `errors`) or the body is not valid JSON.',
   404: 'Not Found: the bear or comment does not exist.',
+  409: 'Conflict: the request clashes with existing data, e.g. an e-mail address that is already registered.',
   500: 'Internal Server Error: an unexpected error; details are only in the log, under the request id.',
   502: 'Bad Gateway: Wikipedia is unreachable or answered with something unusable (problem type upstream-unavailable).',
   504: 'Gateway Timeout: Wikipedia did not answer in time (problem type upstream-timeout).',
@@ -146,6 +147,7 @@ export function registerOpenApi(app: FastifyInstance): void {
       tags: [
         { name: 'bears', description: 'Bears from Wikipedia, normalised' },
         { name: 'comments', description: 'Comments on bears (in memory)' },
+        { name: 'auth', description: 'Accounts' },
         { name: 'operations', description: 'Health and diagnostics' },
       ],
     },
