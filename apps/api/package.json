@@ -18,11 +18,14 @@
     "db:migrate": "tsx --env-file=.env.example --env-file-if-exists=.env src/db/migrate.ts",
     "db:seed": "tsx --env-file=.env.example --env-file-if-exists=.env src/db/seed.ts",
     "db:seed:comments": "tsx --env-file=.env.example --env-file-if-exists=.env src/db/seed-comments.ts",
-    "race:reports": "tsx --env-file=.env.example --env-file-if-exists=.env src/scripts/report-race.ts"
+    "race:reports": "tsx --env-file=.env.example --env-file-if-exists=.env src/scripts/report-race.ts",
+    "attack:login": "tsx src/scripts/brute-force.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",
     "@fastify/cors": "^11.4.1",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/rate-limit": "^11.3.0",
     "@fastify/swagger": "^9.9.3",
     "@fastify/swagger-ui": "^6.1.3",
     "argon2": "^0.45.2",

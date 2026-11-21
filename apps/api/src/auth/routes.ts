@@ -25,11 +25,13 @@ const TAGS = ['auth'];
 interface AuthOptions {
   auth: AuthService;
   secureCookies: boolean;
+  // Per client IP and route; a 429 with Retry-After once exceeded.
+  rateLimit: { max: number; timeWindow: number };
 }
 
 const authRoutes: FastifyPluginAsyncZod<AuthOptions> = async (
   app,
-  { auth, secureCookies }
+  { auth, secureCookies, rateLimit }
 ) => {
   // HttpOnly: no JavaScript (and no XSS) can read it. Secure: HTTPS only.
   // SameSite=Lax: not sent on cross-site POSTs, but on links to the site.
@@ -44,13 +46,17 @@ const authRoutes: FastifyPluginAsyncZod<AuthOptions> = async (
   app.post(
     '/auth/register',
     {
+      config: { rateLimit },
       schema: {
         tags: TAGS,
         summary: 'Create an account',
         description:
           'The password needs at least 12 characters and nothing else; it is stored only as an argon2id hash. Every new account has the role `user`.',
         body: CredentialsSchema,
-        response: { 201: UserSchema, ...problemResponses(400, 409, 500) },
+        response: {
+          201: UserSchema,
+          ...problemResponses(400, 409, 413, 429, 500),
+        },
       },
     },
     async (request, reply) => {
@@ -67,12 +73,16 @@ const authRoutes: FastifyPluginAsyncZod<AuthOptions> = async (
   app.post(
     '/auth/login',
     {
+      config: { rateLimit },
       schema: {
         tags: TAGS,
         summary: 'Log in',
         description: `Sets the HttpOnly \`${SESSION_COOKIE}\` cookie, valid for 7 days or until logout.`,
         body: LoginSchema,
-        response: { 200: UserSchema, ...problemResponses(400, 401, 500) },
+        response: {
+          200: UserSchema,
+          ...problemResponses(400, 401, 413, 429, 500),
+        },
       },
     },
     async (request, reply) => {

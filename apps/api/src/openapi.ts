@@ -50,6 +50,8 @@ const PROBLEM_DESCRIPTIONS: Record<number, string> = {
   403: 'Forbidden: logged in, but not allowed to do this.',
   404: 'Not Found: the bear or comment does not exist.',
   409: 'Conflict: the request clashes with existing data, e.g. an e-mail address that is already registered.',
+  413: 'Content Too Large: the body exceeds 16 KiB.',
+  429: 'Too Many Requests: too many attempts from this IP; the `retry-after` header says how many seconds to wait.',
   500: 'Internal Server Error: an unexpected error; details are only in the log, under the request id.',
   502: 'Bad Gateway: Wikipedia is unreachable or answered with something unusable (problem type upstream-unavailable).',
   504: 'Gateway Timeout: Wikipedia did not answer in time (problem type upstream-timeout).',
@@ -157,5 +159,12 @@ export function registerOpenApi(app: FastifyInstance): void {
     transformObject,
   });
 
-  void app.register(fastifySwaggerUi, { routePrefix: DOCS_PREFIX });
+  // Swagger UI needs inline styles, which the strict default CSP of helmet
+  // forbids on its pages; scripts stay restricted to 'self'.
+  void app.register(fastifySwaggerUi, {
+    routePrefix: DOCS_PREFIX,
+    staticCSP: true,
+    transformStaticCSP: (header) =>
+      header.replace('style-src ', "style-src 'unsafe-inline' "),
+  });
 }

@@ -62,6 +62,11 @@ services:
       # CORS_ORIGINS=http://localhost:4173. Empty: none; the web app below
       # reaches the API through nginx on its own origin and needs no CORS.
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # nginx (web) forwards the client IP in X-Forwarded-For; it is only
+      # believed from private networks such as the compose network.
+      TRUST_PROXY: ${TRUST_PROXY:-uniquelocal}
+      # Login/register attempts per client IP and minute (default 5).
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-}
       # REPORT_MODE=naive brings back the lost-update race of
       # POST /api/comments/:id/report (see `npm run race:reports`).
       REPORT_MODE: ${REPORT_MODE:-}

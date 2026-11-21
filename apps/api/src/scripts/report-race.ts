@@ -1,14 +1,18 @@
 import pg from 'pg';
+import { z } from 'zod';
 import { loadConfig } from '../config.js';
 
 // Lost-update demo: creates a comment, sends REPORTS (default 50) reports for
 // it at the same time and reads the final report_count from the database.
 // Run against an API with REPORT_MODE=naive and again with the default.
-const apiUrl = (process.env.API_URL ?? 'http://localhost:3000').replace(
-  /\/+$/,
-  ''
-);
-const reports = Number(process.env.REPORTS ?? 50);
+const env = z
+  .object({
+    API_URL: z.url().default('http://localhost:3000'),
+    REPORTS: z.coerce.number().int().min(1).max(1000).default(50),
+  })
+  .parse(process.env);
+const apiUrl = env.API_URL.replace(/\/+$/, '');
+const reports = env.REPORTS;
 
 async function api(path: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(`${apiUrl}/api${path}`, init);

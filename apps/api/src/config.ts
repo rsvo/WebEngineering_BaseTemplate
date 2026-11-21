@@ -20,6 +20,8 @@ export interface Config {
   prettyLogs: boolean;
   enableDebugRoutes: boolean;
   secureCookies: boolean;
+  trustProxy: string | false;
+  authRateLimit: { max: number; windowSeconds: number };
   corsOrigins: readonly string[];
   database: DatabaseConfig;
   wikipedia: WikipediaConfig;
@@ -67,6 +69,12 @@ const EnvSchema = z.object({
   ENABLE_DEBUG_ROUTES: z.stringbool().optional(),
   // Secure cookies are only sent over HTTPS (browsers treat localhost as such).
   COOKIE_SECURE: z.stringbool().optional(),
+  // Proxies whose X-Forwarded-For is believed, e.g. "uniquelocal" (private
+  // networks) or "10.0.0.1,10.0.0.2". Unset: the socket address is the client.
+  TRUST_PROXY: z.string().optional(),
+  // Login and register attempts per client IP and window.
+  AUTH_RATE_LIMIT_MAX: int(1, 10_000).default(5),
+  AUTH_RATE_LIMIT_WINDOW_S: int(1, 86_400).default(60),
   // `naive` brings back the lost-update race of POST /comments/:id/report.
   REPORT_MODE: z.enum(['naive', 'locked']).default('locked'),
   CORS_ORIGINS: z
@@ -103,6 +111,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     prettyLogs: !production,
     enableDebugRoutes: e.ENABLE_DEBUG_ROUTES ?? !production,
     secureCookies: e.COOKIE_SECURE ?? production,
+    trustProxy: e.TRUST_PROXY ?? false,
+    authRateLimit: {
+      max: e.AUTH_RATE_LIMIT_MAX,
+      windowSeconds: e.AUTH_RATE_LIMIT_WINDOW_S,
+    },
     // Empty: no cross-origin access at all. The web app does not need it, as it
     // reaches the API through a same-origin proxy (Vite in dev, nginx in Docker).
     corsOrigins: e.CORS_ORIGINS,

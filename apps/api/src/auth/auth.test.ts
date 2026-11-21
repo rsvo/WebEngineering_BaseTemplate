@@ -138,3 +138,52 @@ describe('registration', () => {
     assert.equal(await me(cookie), 401);
   });
 });
+
+describe('hardening', () => {
+  let app: FastifyInstance;
+
+  beforeEach(() => {
+    app = buildApp(
+      { ...config, authRateLimit: { max: 3, windowSeconds: 60 } },
+      { users: createInMemoryUserRepository() }
+    );
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const login = async (): Promise<LightMyRequestResponse> =>
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      body: { email: 'ann@example.org', password: 'guess' },
+    });
+
+  it('answers 429 with Retry-After once the login limit is used up', async () => {
+    for (let i = 0; i < 3; i++) assert.equal((await login()).statusCode, 401);
+
+    const limited = await login();
+    assert.equal(limited.statusCode, 429);
+    assert.equal(limited.headers['retry-after'], '60');
+    assert.match(
+      limited.headers['content-type'] ?? '',
+      /^application\/problem\+json/
+    );
+  });
+
+  it('sends security headers and rejects oversized bodies', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ email: 'x'.repeat(20_000) }),
+    });
+
+    assert.equal(response.statusCode, 413);
+    assert.equal(response.headers['x-content-type-options'], 'nosniff');
+    assert.match(
+      String(response.headers['content-security-policy']),
+      /frame-ancestors 'self'/
+    );
+  });
+});

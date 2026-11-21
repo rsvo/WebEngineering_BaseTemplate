@@ -5,6 +5,20 @@ on:
   pull_request:
 
 jobs:
+  secret-scan:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history, so every commit is scanned)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for committed secrets
+        run: >-
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.28.0
+          git /repo --redact --verbose
+
   quality-gate:
     name: quality-gate (${{ matrix.workspace }})
     runs-on: ubuntu-latest

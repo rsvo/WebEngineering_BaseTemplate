@@ -93,6 +93,8 @@ async function send(
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      // Sends the session cookie also to an API on another origin (CORS).
+      credentials: 'include',
       signal,
     });
   } catch (err) {

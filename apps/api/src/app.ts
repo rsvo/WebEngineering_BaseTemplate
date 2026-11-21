@@ -1,4 +1,6 @@
 import fastifyCors from '@fastify/cors';
+import fastifyHelmet from '@fastify/helmet';
+import fastifyRateLimit from '@fastify/rate-limit';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type pg from 'pg';
@@ -48,6 +50,12 @@ export function buildApp(
   dependencies: AppDependencies = {}
 ): FastifyInstance {
   const app = Fastify({
+    // Our largest body is a comment of 2000 characters; anything far beyond
+    // that is rejected with a 413 before it is parsed.
+    bodyLimit: 16 * 1024,
+    // Behind nginx every request comes from the proxy; only trusted proxies
+    // may set the client IP (used by the rate limit) via X-Forwarded-For.
+    trustProxy: config.trustProxy,
     genReqId,
     // Every log line of a request carries its id under this key.
     requestIdLogLabel: 'requestId',
@@ -71,17 +79,25 @@ export function buildApp(
   // One error format for everything, including 404s for unknown routes.
   registerProblemDetails(app);
 
+  // Security headers on every response: nosniff, frame-ancestors 'none' via a
+  // strict CSP, HSTS, no Referer leaks, ... The JSON API needs no exceptions;
+  // Swagger UI sets its own CSP for its pages (see openapi.ts).
+  void app.register(fastifyHelmet);
+
+  // Only routes with a `config.rateLimit` are limited (login and register).
+  void app.register(fastifyRateLimit, { global: false });
+
   // Only origins on the allow-list may read our responses from a browser.
   // Everything the web app needs and nothing more: its three methods, the one
   // non-safelisted request header it sends (content-type: application/json),
-  // and the request id it shows in error messages. No credentials: the API
-  // uses no cookies, so browsers never need to send them cross-origin.
+  // and the request id it shows in error messages. Credentials: the session
+  // cookie, which is why the origin can never be "*".
   void app.register(fastifyCors, {
     origin: config.corsOrigins.length > 0 ? [...config.corsOrigins] : false,
     methods: ['GET', 'POST', 'DELETE'],
     allowedHeaders: ['content-type'],
     exposedHeaders: [REQUEST_ID_HEADER],
-    credentials: false,
+    credentials: true,
     // Browsers may reuse a preflight result for 10 minutes.
     maxAge: 600,
   });
@@ -122,6 +138,10 @@ export function buildApp(
   registerAuth(app, {
     auth: createAuthService({ users }),
     secureCookies: config.secureCookies,
+    rateLimit: {
+      max: config.authRateLimit.max,
+      timeWindow: config.authRateLimit.windowSeconds * 1000,
+    },
   });
   void app.register(bearRoutes, { prefix: '/api', bears });
   void app.register(commentRoutes, {

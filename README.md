@@ -1085,7 +1085,7 @@ docker compose exec db psql -U bears -c 'SELECT email, password_hash FROM users'
 
 - `drizzle/0004_sessions.sql`: `sessions (id = sha256(token), user_id → users ON DELETE CASCADE, expires_at)`.
 - `auth/service.ts`: `login` checks the password with `argon2.verify`. For an unknown e-mail it checks a dummy hash, so both cases take the same time and answer the same 401. Every login creates a new token (no session fixation).
-- `auth/routes.ts`: the cookie is `HttpOnly; SameSite=Lax; Path=/api; Max-Age=604800`, plus `Secure` in production (`COOKIE_SECURE` overrides it; browsers and curl accept it on `http://localhost`). Logout deletes the row and clears the cookie. A `preHandler` hook sets `request.user` for every route, which Task 3 builds on.
+- `auth/routes.ts`: the cookie is `HttpOnly; SameSite=Lax; Path=/api; Max-Age=604800`, plus `Secure` in production (`COOKIE_SECURE` overrides it; browsers and curl accept it on `http://localhost`). Logout deletes the row and clears the cookie. A `preValidation` hook sets `request.user` for every route, which Task 3 builds on.
 - Web: an `AuthProvider` asks `/api/auth/me` on load, since JavaScript can't see the cookie. The nav bar shows "Log in / Register" or the e-mail and "Log out". Registering logs you in right away.
 
 ```sh
@@ -1151,6 +1151,44 @@ del -b mod.jar $API/comments/$(new)   # 204 moderator
 **IDOR.** An Insecure Direct Object Reference is when the server takes an id from the request and acts on it without checking whether this user may touch that object. Before this task, anyone could `DELETE /api/comments/<any id>`. The ids are UUIDs, but they're in every list response, so being hard to guess doesn't protect anything. The fix is the ownership check on every request, on the server. That's why A01 Broken Access Control is the number one OWASP risk: the check is easy to forget on a single route.
 
 **Hiding a button.** The UI isn't the only client. Anyone can send the same request with curl, the browser's DevTools or a script, and they can change the id while doing it. Hiding the button only spares honest users an error message. The 403 from the server is the actual protection, and the matrix above shows it still works when the button isn't there.
+
+#### Task 4: Harden the API
+
+Rate limiting on login and register (429 with `Retry-After`), security headers via `@fastify/helmet`, strict CORS with credentials, a body size limit, zod on every input, secrets only from the environment, and a secret scan in CI.
+
+**Implementation:**
+
+- `@fastify/rate-limit` with `global: false`: only `POST /api/auth/login` and `/register` have a `config.rateLimit`, 5 attempts per IP and minute (`AUTH_RATE_LIMIT_MAX`, `AUTH_RATE_LIMIT_WINDOW_S`). The 429 goes through the normal error handler, so it is a Problem with `Retry-After`. Behind nginx every request comes from the proxy, so `TRUST_PROXY=uniquelocal` (compose) makes Fastify take the client IP from `X-Forwarded-For`, but only from private networks.
+- `@fastify/helmet` on every response: a strict CSP, `nosniff`, `X-Frame-Options`, HSTS, `Referrer-Policy: no-referrer`, ... Swagger UI at `/api/docs` gets its own CSP that also allows inline styles.
+- CORS: still an allow-list from `CORS_ORIGINS` with three methods and one header, now with `credentials: true` so the session cookie works cross-origin; the web client sends `credentials: 'include'`.
+- `bodyLimit: 16 KiB`: larger bodies get a 413 before they are parsed.
+- zod everywhere: params, query and body of every route, the environment in `config.ts`, and also the env of the seed and the scripts.
+- Secrets: only `.env.example` (local defaults) is committed, `.env` is git-ignored. The CI job `secret-scan` runs gitleaks over the whole git history.
+- `npm run attack:login -w apps/api` sends 10 wrong logins (`ATTEMPTS`, `API_URL`); tests in `auth/auth.test.ts` cover the 429, the headers and the 413.
+
+```sh
+npm run attack:login -w apps/api     # 1-5: 401, 6-10: 429 (Retry-After: 60s)
+curl -I localhost:3000/api/bears      # Content-Security-Policy, X-Content-Type-Options, ...
+docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.28.0 git /repo   # the CI scan, locally
+```
+
+Residual risk: port 3000 is published directly for the demos, and Docker forwards it from a private gateway address, so a client there can set `X-Forwarded-For` itself and get a fresh limit per fake IP. In production, only the proxy should reach the API. The limit is also kept in memory per process, so several API instances would need a shared store such as Redis.
+
+**Theory question:** Map your measures to the OWASP Top 10: which items do they address? Explain token bucket versus fixed window rate limiting, and what "defence in depth" means for this API.
+
+**Answer:**
+
+**OWASP Top 10 (2025).**
+- A01 Broken Access Control: the CORS allow-list keeps other sites from reading responses with the user's cookie, and the policy from Task 3 handles the rest.
+- A02 Security Misconfiguration: helmet's headers, a strict CORS config, and an environment that is validated at startup instead of silently falling back.
+- A04 Cryptographic Failures: secrets only come from the environment and gitleaks keeps them out of git. There are also Secure cookies and HSTS.
+- A05 Injection: zod on every input (Drizzle's parameterised queries do the real work).
+- A07 Authentication Failures: the rate limit against brute force and credential stuffing.
+- A06 Insecure Design and A10 Mishandling of Exceptional Conditions: the body limit and the rate limit cap how much work one client can cause.
+
+**Fixed window vs. token bucket.** A fixed window counts requests per key and resets the counter when the window ends. That's what `@fastify/rate-limit` does, and it's simple and cheap. The weakness is the boundary: five attempts at the end of one window and five at the start of the next make ten in a few seconds. A token bucket holds up to N tokens and refills them at a steady rate; each request takes one. It allows a short burst up to the bucket size, but over time never more than the refill rate, without the boundary spike. For a login, both are fine, because the argon2 hash already makes every attempt expensive.
+
+**Defence in depth.** No single measure is trusted to hold, so every attack runs into several layers. Password guessing meets the rate limit, the slow argon2 hash and the 12-character minimum. CSRF meets SameSite=Lax, the CORS allow-list and the JSON content type, which forces a preflight. Injection and XSS meet zod, parameterised queries, React's escaping and the CSP. If one layer has a bug or a misconfiguration, the next one still stops the attack.
 
 ---
 
